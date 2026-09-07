@@ -9,10 +9,14 @@ data/audio/
 data/videos/
 data/video_specs/
 data/gameplay_cache/
+data/music_cache/
 video_gen/remotion/node_modules/
 video_gen/remotion/public/audio/
 video_gen/remotion/public/background/
+video_gen/remotion/public/music/
 video_gen/remotion/out/
 video_gen/manual_clips/*
 !video_gen/manual_clips/README.md
+video_gen/manual_music/*
+!video_gen/manual_music/README.md
 logs/

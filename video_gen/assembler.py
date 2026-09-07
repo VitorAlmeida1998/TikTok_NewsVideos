@@ -11,6 +11,7 @@ from pathlib import Path
 
 from video_gen.captions import transcribe_words
 from video_gen.gameplay import download_trailer_clip
+from video_gen.music import download_ost_clip
 from video_gen.tts import synthesize_speech
 
 logger = logging.getLogger("video_gen")
@@ -19,6 +20,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "video_gen" / "remotion"
 REMOTION_PUBLIC_AUDIO_DIR = REMOTION_DIR / "public" / "audio"
 REMOTION_PUBLIC_BACKGROUND_DIR = REMOTION_DIR / "public" / "background"
+REMOTION_PUBLIC_MUSIC_DIR = REMOTION_DIR / "public" / "music"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "videos"
 AUDIO_DIR = PROJECT_ROOT / "data" / "audio"
 SPECS_DIR = PROJECT_ROOT / "data" / "video_specs"
@@ -39,13 +41,15 @@ def build_video_spec(
     source: str,
     title: str,
     background_relative_path: str = "",
+    music_relative_path: str = "",
 ) -> dict:
     """Monta o dicionário de spec do vídeo (o que o componente Remotion consome).
 
-    `audio_relative_path` e `background_relative_path` devem ser relativos à
-    pasta public/ do projeto Remotion (ex: "audio/item_1.mp3",
-    "background/forza-horizon-6.mp4"), consumidos via staticFile() no
-    componente. `background_relative_path` vazio = usa o fundo gradiente padrão.
+    `audio_relative_path`, `background_relative_path` e `music_relative_path`
+    devem ser relativos à pasta public/ do projeto Remotion (ex:
+    "audio/item_1.mp3", "background/forza-horizon-6.mp4",
+    "music/forza-horizon-6.mp3"), consumidos via staticFile() no componente.
+    Vazio = sem fundo de gameplay / sem música, respectivamente.
     """
     return {
         "itemId": item_id,
@@ -56,6 +60,7 @@ def build_video_spec(
         "cta": cta,
         "audioPath": audio_relative_path,
         "backgroundVideoPath": background_relative_path,
+        "musicPath": music_relative_path,
         "words": [w.to_dict() if hasattr(w, "to_dict") else w for w in words],
     }
 
@@ -144,6 +149,27 @@ def generate_video_for_item(row, render: bool = True) -> dict:
                 item_id,
             )
 
+    # Música de fundo: busca a trilha sonora/tema oficial do jogo (via
+    # yt-dlp) se game_name estiver disponível. Decisão explícita do usuário
+    # de usar OST oficial, assumindo o risco de copyright no TikTok — mesma
+    # regra dura de nunca contornar verificação de idade/login do YouTube.
+    # Se falhar, o vídeo fica sem música de fundo (só a narração).
+    music_relative_path = ""
+    if game_name:
+        track_path = download_ost_clip(game_name)
+        if track_path:
+            REMOTION_PUBLIC_MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+            public_music_path = REMOTION_PUBLIC_MUSIC_DIR / track_path.name
+            if not public_music_path.exists():
+                shutil.copyfile(track_path, public_music_path)
+            music_relative_path = f"music/{track_path.name}"
+        else:
+            logger.info(
+                "Sem música de fundo para '%s' (item %s), vídeo fica só com narração",
+                game_name,
+                item_id,
+            )
+
     spec = build_video_spec(
         item_id=item_id,
         hook=hook,
@@ -154,6 +180,7 @@ def generate_video_for_item(row, render: bool = True) -> dict:
         source=row["source"],
         title=row["title"],
         background_relative_path=background_relative_path,
+        music_relative_path=music_relative_path,
     )
     spec_path = write_spec(spec, item_id)
 

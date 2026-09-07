@@ -28,6 +28,7 @@ export const newsShortSchema = z.object({
   cta: z.string(),
   audioPath: z.string(),
   backgroundVideoPath: z.string().default(""),
+  musicPath: z.string().default(""),
   words: z.array(wordSchema),
 });
 
@@ -227,12 +228,29 @@ const CtaOverlay: React.FC<{ cta: string; showAfter: number }> = ({
   );
 };
 
+// Música de fundo (OST/tema do jogo) em loop, em volume baixo para não
+// competir com a narração — a narração é sempre a prioridade de mixagem.
+const MUSIC_CLIP_DURATION_SECONDS = 40;
+const MUSIC_VOLUME = 0.12;
+
+const BackgroundMusic: React.FC<{ src: string }> = ({ src }) => {
+  const { fps, durationInFrames } = useVideoConfig();
+  const clipFrames = Math.round(MUSIC_CLIP_DURATION_SECONDS * fps);
+
+  return (
+    <Loop durationInFrames={clipFrames} times={Math.ceil(durationInFrames / clipFrames)}>
+      <Audio src={src} volume={MUSIC_VOLUME} />
+    </Loop>
+  );
+};
+
 export const NewsShort: React.FC<NewsShortProps> = ({
   hook,
   cta,
   source,
   audioPath,
   backgroundVideoPath,
+  musicPath,
   words,
 }) => {
   const ctaShowAfter =
@@ -242,11 +260,13 @@ export const NewsShort: React.FC<NewsShortProps> = ({
   // (ex: "audio/item_1.mp3"), copiado pra lá pelo assembler.py antes do render.
   const audioSrc = audioPath ? staticFile(audioPath) : "";
   const backgroundSrc = backgroundVideoPath ? staticFile(backgroundVideoPath) : "";
+  const musicSrc = musicPath ? staticFile(musicPath) : "";
 
   return (
     <AbsoluteFill>
       {backgroundSrc ? <GameplayBackground src={backgroundSrc} /> : <Background />}
       {audioSrc ? <Audio src={audioSrc} /> : null}
+      {musicSrc ? <BackgroundMusic src={musicSrc} /> : null}
       <HookOverlay hook={hook} source={source} />
       <WordCaptions words={words} />
       <CtaOverlay cta={cta} showAfter={ctaShowAfter} />

@@ -23,6 +23,7 @@ export const RemotionRoot: React.FC = () => {
           cta: "Comenta aqui o que você acha!",
           audioPath: "",
           backgroundVideoPath: "",
+          musicPath: "",
           words: [],
         }}
         calculateMetadata={calculateNewsShortMetadata}
