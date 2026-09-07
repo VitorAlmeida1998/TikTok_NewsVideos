@@ -131,17 +131,40 @@ evitando custo de API por token.
 1. Gera narração em áudio via ElevenLabs TTS
 2. Transcreve o áudio com `faster-whisper` (local, offline) para obter
    timestamps por palavra
-3. Se o roteiro identificou um `game_name`, busca um trailer oficial no
-   YouTube via `yt-dlp` ("<jogo> official trailer"), baixa um trecho curto
-   (~12s) e recorta para 9:16 — usado como fundo em loop com overlay
-   escuro. Clipes ficam em cache (`data/gameplay_cache/`) por jogo, evitando
-   rebaixar. Se falhar ou não houver jogo identificado, usa fundo gradiente.
+3. Se o roteiro identificou um `game_name`, busca um clipe de fundo nesta
+   ordem: (a) clipe manual em `video_gen/manual_clips/<slug>.*` fornecido
+   por você, (b) clipe já em cache de uma execução anterior, (c) download
+   automático de trailer oficial no YouTube via `yt-dlp`. Recorta para 9:16
+   e cacheia por jogo em `data/gameplay_cache/`. **Nunca tenta contornar
+   verificação de idade/login do YouTube** — se o trailer exigir login, o
+   download falha e cai no fundo gradiente, a menos que você tenha colocado
+   um clipe manual para aquele jogo (ver `video_gen/manual_clips/README.md`)
 4. Monta um spec JSON (roteiro + timings + fundo) e chama
    `npx remotion render`
 5. O template Remotion (`video_gen/remotion/src/NewsShort.tsx`) renderiza
    um vídeo vertical 1080x1920 com fundo de gameplay/trailer em loop (ou
    gradiente), hook animado, legendas "karaokê" palavra-a-palavra
    sincronizadas com o áudio, e CTA final
+
+### Clipes manuais (jogos com trailer restrito por idade)
+
+Alguns trailers no YouTube exigem login para confirmar idade. Este projeto
+**nunca** tenta contornar essa verificação (sem cookies de sessão, sem
+login automatizado, sem nenhum outro método de burlar o gate). Nesses
+casos, você pode fornecer o clipe manualmente:
+
+```bash
+# descobrir o slug esperado para o nome do jogo
+uv run python -c "from video_gen.gameplay import slugify; print(slugify('Nome do Jogo'))"
+
+# colocar o arquivo lá (qualquer formato que o ffmpeg leia)
+cp meu_clipe.mp4 video_gen/manual_clips/nome-do-jogo.mp4
+```
+
+Na próxima vez que `video_gen.run` processar um item desse jogo, o clipe
+manual é detectado automaticamente, recortado/escalado para 9:16 e
+cacheado — tem prioridade sobre cache antigo e sobre o download via
+YouTube. Detalhes em `video_gen/manual_clips/README.md`.
 
 ### ⚠️ Nota sobre baixar clipes do YouTube (yt-dlp)
 

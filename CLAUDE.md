@@ -41,13 +41,18 @@ BR veja a notícia em outro lugar.
   `npx remotion render` chamado por subprocess. Assets de áudio/vídeo de
   fundo precisam estar dentro de `remotion/public/` (staticFile()) — paths
   absolutos do filesystem NÃO funcionam diretamente no render do Remotion.
-- **Gameplay de fundo (video_gen)**: `yt-dlp` busca "<jogo> official
-  trailer" no YouTube, baixa um trecho curto (~12s, 1080p) via
-  `--download-sections`, recorta/escala pra 9:16 com ffmpeg, cacheia por
-  jogo em `data/gameplay_cache/`. Requer runtime `deno` instalado (yt-dlp
-  usa JS runtime pra extração correta do YouTube — sem ele funciona mas com
-  warnings e possível perda de formatos). Fallback: fundo gradiente se
-  `game_name` vazio ou download falhar.
+- **Gameplay de fundo (video_gen)**: ordem de prioridade — (1) clipe manual
+  do usuário em `video_gen/manual_clips/<slug>.*`, processado/cacheado na
+  primeira vez (`_prepare_manual_clip`); (2) cache automático em
+  `data/gameplay_cache/<slug>.mp4`; (3) `yt-dlp` busca "<jogo> official
+  trailer" no YouTube, baixa trecho curto (~12s, 1080p) via
+  `--download-sections`, recorta/escala pra 9:16 com ffmpeg. Requer runtime
+  `deno` instalado. Fallback final: fundo gradiente.
+  **REGRA DURA: nunca contornar verificação de idade/login do YouTube**
+  (sem cookies de sessão, sem conta automatizada, sem nenhum método de
+  burlar esse gate) — usuário perguntou explicitamente sobre isso e a
+  resposta foi recusar e implementar o sistema de clipes manuais como
+  alternativa segura em vez disso.
 - **Publisher**: TikTok Content Posting API v2 (`open.tiktokapis.com`),
   modo inbox (draft, padrão) ou direct post. Dry-run por padrão.
 

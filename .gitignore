@@ -13,3 +13,6 @@ video_gen/remotion/node_modules/
 video_gen/remotion/public/audio/
 video_gen/remotion/public/background/
 video_gen/remotion/out/
+video_gen/manual_clips/*
+!video_gen/manual_clips/README.md
+logs/
