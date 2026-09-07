@@ -14,6 +14,8 @@ import argparse
 import logging
 import sys
 
+from dotenv import load_dotenv
+
 from dedupe.keyword_filter import DEFAULT_KEYWORDS, find_matched_keywords
 from shared.db import get_connection, get_unevaluated_items, mark_relevance
 
@@ -51,6 +53,8 @@ def run(db_path: str | None = None, keywords: list[str] | None = None) -> tuple[
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="Avalia relevância de itens coletados por palavras-chave"
     )

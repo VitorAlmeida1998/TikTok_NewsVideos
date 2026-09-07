@@ -5,3 +5,9 @@ __pycache__/
 data/*.db
 .pytest_cache/
 *.egg-info/
+data/audio/
+data/videos/
+data/video_specs/
+video_gen/remotion/node_modules/
+video_gen/remotion/public/audio/
+video_gen/remotion/out/

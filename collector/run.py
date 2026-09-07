@@ -9,6 +9,8 @@ import argparse
 import logging
 import sys
 
+from dotenv import load_dotenv
+
 from collector.feeds_config import DEFAULT_FEEDS_PATH, load_feeds
 from collector.parser import parse_feed
 from shared.db import get_connection, save_items
@@ -45,6 +47,8 @@ def run(feeds_path: str = DEFAULT_FEEDS_PATH, db_path: str | None = None) -> int
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Coleta feeds RSS de notícias de games")
     parser.add_argument("--feeds", default=DEFAULT_FEEDS_PATH, help="Caminho do feeds.yaml")
     parser.add_argument("--db", default=None, help="Caminho do banco SQLite")

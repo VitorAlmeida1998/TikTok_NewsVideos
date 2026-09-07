@@ -1,35 +1,43 @@
 # TikTok News Videos — Pipeline de Notícias de Games
 
-Pipeline automatizado que monitora notícias internacionais de games em tempo
-real, filtra as mais relevantes, gera um roteiro em português via LLM,
-transforma em vídeo curto (narração + legendas + imagens) e publica no
-TikTok — com o objetivo de captar e transformar a notícia em conteúdo antes
-que o público brasileiro veja em outro lugar.
+Pipeline automatizado, **completo e funcional**, que monitora notícias
+internacionais de games em tempo real, filtra as mais relevantes, gera um
+roteiro em português via IA, transforma em vídeo curto (narração + legendas
+sincronizadas + visual) e prepara para publicação no TikTok — com o
+objetivo de captar e transformar a notícia em conteúdo antes que o público
+brasileiro veja em outro lugar.
 
-## Como funciona (pipeline)
+## Status: pipeline completo, validado ponta a ponta com dados reais
+
+Todas as 5 etapas estão implementadas, testadas (65 testes automatizados) e
+validadas com execução real (não apenas mocks): 290+ notícias coletadas,
+roteiros gerados via IA, 5 vídeos MP4 1080x1920 renderizados com narração e
+legendas sincronizadas.
 
 ```
  feeds RSS  →  collector  →  dedupe  →  script_gen  →  video_gen  →  publisher
 (IGN, etc.)   (coleta e     (filtro    (roteiro PT-BR   (TTS +      (posta no
-              normaliza)    de         via LLM)         legendas +  TikTok)
-                            relevância)                 imagens)
+              normaliza)    de         via IA)          legendas +  TikTok,
+                            relevância)                 imagens)    dry-run por padrão)
 ```
-
-Cada etapa é um módulo Python independente, testável isoladamente, que lê e
-escreve no mesmo banco SQLite compartilhado (`data/news.db`).
 
 | Módulo | Status | Descrição |
 |---|---|---|
 | `collector` | ✅ pronto | Coleta feeds RSS, normaliza e salva com dedupe por hash |
 | `dedupe` | ✅ pronto | Filtro de relevância por palavras-chave |
-| `script_gen` | 🚧 planejado | Roteiro em PT-BR via API Anthropic |
-| `video_gen` | 🚧 planejado | TTS + legendas + imagens (Remotion) |
-| `publisher` | 🚧 planejado | Publicação automática no TikTok |
+| `script_gen` | ✅ pronto | Roteiro em PT-BR via Claude Code CLI (assinatura Pro/Max) |
+| `video_gen` | ✅ pronto | TTS (ElevenLabs) + legendas (faster-whisper) + render (Remotion) |
+| `publisher` | ✅ pronto | TikTok Content Posting API — **dry-run por padrão**, requer app aprovado pra publicar de verdade |
+| `pipeline` | ✅ pronto | Orquestrador end-to-end, todas as etapas em 1 comando |
 
 ## Requisitos
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) para gerenciamento de dependências
+- Node.js 18+ e npm (para renderização de vídeo via Remotion)
+- ffmpeg (geralmente já presente no sistema)
+- Claude Code CLI autenticado (`claude`) — usa sua assinatura Pro/Max para o `script_gen`, sem custo de API por token
+- Conta ElevenLabs com permissão `text_to_speech` habilitada na API key
 
 ## Setup
 
@@ -37,54 +45,103 @@ escreve no mesmo banco SQLite compartilhado (`data/news.db`).
 git clone https://github.com/VitorAlmeida1998/TikTok_NewsVideos.git
 cd TikTok_NewsVideos
 uv sync
-cp .env.example .env   # preencher chaves de API quando necessário
+cp .env.example .env   # preencher ELEVENLABS_API_KEY (e TikTok, quando tiver)
+cd video_gen/remotion && npm install && cd ../..
 ```
+
+Note: `script_gen` usa o `claude` CLI (assinatura Pro/Max), **não** precisa
+de `ANTHROPIC_API_KEY` — se essa variável estiver setada no ambiente, o
+código a remove automaticamente antes de chamar o CLI, para forçar o uso do
+login OAuth em vez de billing por API.
 
 ## Uso
 
-### 1. Coletar notícias
+### Pipeline completo (recomendado)
 
-Lê os feeds configurados em `feeds.yaml`, normaliza cada item e salva no
-SQLite (dedupe automático por título+URL):
+Roda todas as 5 etapas em sequência, com um único comando:
 
 ```bash
-uv run python -m collector.run
+uv run python -m pipeline.run --limit 5
+```
+
+Por padrão, o `publisher` roda em **dry-run** (não publica nada de verdade,
+só loga o que faria). Para publicar de verdade:
+
+```bash
+uv run python -m pipeline.run --limit 5 --publish-live --publish-mode inbox
+```
+
+### Etapas individuais
+
+```bash
+uv run python -m collector.run              # coleta feeds RSS
+uv run python -m dedupe.run                 # filtra por relevância
+uv run python -m script_gen.run --limit 5   # gera roteiros PT-BR
+uv run python -m video_gen.run --limit 5    # gera vídeos (TTS+legendas+render)
+uv run python -m publisher.run              # dry-run por padrão
+uv run python -m publisher.run --live       # publica de verdade (requer TIKTOK_ACCESS_TOKEN)
 ```
 
 Feeds padrão: IGN, Kotaku, GamesIndustry.biz, PC Gamer, Eurogamer. Edite
 `feeds.yaml` para adicionar/remover fontes.
 
-### 2. Filtrar por relevância
-
-Avalia os itens ainda não avaliados e marca quais são relevantes com base
-em palavras-chave (leak, reveal, delay, launch, exclusive, trailer, release
-date, confirmed...). Idempotente — não reprocessa itens já avaliados:
-
-```bash
-uv run python -m dedupe.run
-```
-
 ### Rodando via cron
 
+Já instalado no crontab do sistema (a cada 30 min, dry-run):
+
 ```cron
-*/10 * * * * cd /caminho/do/projeto && uv run python -m collector.run >> logs/collector.log 2>&1
-*/10 * * * * cd /caminho/do/projeto && uv run python -m dedupe.run    >> logs/dedupe.log    2>&1
+*/30 * * * * cd /caminho/do/projeto && uv run python -m pipeline.run --limit 5 >> logs/pipeline.log 2>&1
 ```
+
+Verifique/edite com `crontab -e`. Logs em `logs/pipeline.log`.
 
 ## Estrutura do projeto
 
 ```
 /collector       -> coleta de RSS/APIs de notícias
 /dedupe          -> deduplicação e filtro de relevância
-/script_gen      -> geração de roteiro via LLM (Anthropic API)
-/video_gen       -> geração de vídeo (TTS + legendas + imagens)
-/publisher       -> integração com API de publicação no TikTok
+/script_gen      -> geração de roteiro via Claude Code CLI (PT-BR)
+/video_gen       -> TTS (ElevenLabs) + legendas (whisper) + render (Remotion)
+  /remotion      -> projeto Node.js/React com o template do vídeo (9:16)
+/publisher       -> integração com TikTok Content Posting API
+/pipeline        -> orquestrador end-to-end (todas as etapas)
 /shared          -> modelos de dados (NewsItem), acesso ao SQLite, configs
-/tests           -> testes por módulo, espelhando a estrutura acima
+/tests           -> 65 testes, espelhando a estrutura acima, 100% offline
 feeds.yaml       -> lista de feeds RSS monitorados
 .env.example     -> template de variáveis de ambiente (sem valores reais)
 CLAUDE.md        -> especificação detalhada do projeto e convenções
 ```
+
+## Como cada etapa funciona
+
+**collector**: lê `feeds.yaml`, busca cada feed via `feedparser`, normaliza
+em `NewsItem` e salva no SQLite com dedupe automático (hash de título+URL).
+
+**dedupe**: avalia itens ainda não avaliados, marca como relevantes os que
+contêm palavras-chave (leak, reveal, delay, launch, exclusive, trailer,
+release date, confirmed...). Idempotente.
+
+**script_gen**: para cada item relevante sem roteiro, chama `claude -p` com
+um prompt estruturado pedindo hook + corpo + CTA em português, retornando
+JSON. Usa a assinatura Claude Pro/Max do usuário via CLI (subprocess),
+evitando custo de API por token.
+
+**video_gen**: para cada item com roteiro pronto:
+1. Gera narração em áudio via ElevenLabs TTS
+2. Transcreve o áudio com `faster-whisper` (local, offline) para obter
+   timestamps por palavra
+3. Monta um spec JSON (roteiro + timings) e chama `npx remotion render`
+4. O template Remotion (`video_gen/remotion/src/NewsShort.tsx`) renderiza
+   um vídeo vertical 1080x1920 com hook animado, legendas "karaokê"
+   palavra-a-palavra sincronizadas com o áudio, e CTA final
+
+**publisher**: envia o vídeo pronto para a TikTok Content Posting API.
+- Modo `inbox` (padrão): envia como rascunho pra caixa de entrada do TikTok
+  do usuário, que revisa e publica manualmente no app — mais seguro
+- Modo `direct`: publica direto no perfil (requer escopo `video.publish`
+  aprovado pelo TikTok)
+- **Dry-run por padrão**: nada é publicado de verdade até passar `--live`
+  explicitamente e ter `TIKTOK_ACCESS_TOKEN` configurado
 
 ## Testes
 
@@ -92,19 +149,23 @@ CLAUDE.md        -> especificação detalhada do projeto e convenções
 uv run pytest -v
 ```
 
-Todos os testes rodam 100% offline (fixtures locais, SQLite em diretório
-temporário) — nenhuma chamada de rede é feita durante `pytest`.
+65 testes, 100% offline (fixtures locais, mocks de APIs externas, SQLite em
+diretório temporário) — nenhuma chamada de rede/custo é feita durante
+`pytest`.
 
 ## Stack
 
 - **Linguagem:** Python 3.12+
 - **Dependências:** uv
-- **Banco de dados:** SQLite (dedupe e histórico)
+- **Banco de dados:** SQLite (dedupe, histórico, estado do pipeline)
 - **Coleta:** feedparser (RSS/Atom)
-- **Orquestração:** scripts Python + cron (sem Airflow/n8n nesta fase)
+- **Roteiro:** Claude Code CLI (`claude -p`), assinatura Pro/Max
+- **TTS:** ElevenLabs (`eleven_multilingual_v2`)
+- **Legendas:** faster-whisper (local, CPU, modelo `base`)
+- **Vídeo:** Remotion (React/TypeScript, Node.js), 1080x1920, render via CLI
+- **Publicação:** TikTok Content Posting API v2 (`open.tiktokapis.com`)
+- **Orquestração:** scripts Python + cron do sistema
 - **Testes:** pytest
-- **Vídeo (planejado):** Remotion (self-hosted) + TTS (ElevenLabs/OpenAI) +
-  whisper.cpp para legendas sincronizadas
 
 ## Regras e convenções
 
@@ -114,9 +175,24 @@ temporário) — nenhuma chamada de rede é feita durante `pytest`.
   geração e publicação
 - Ao gerar vídeo, nunca usar imagens/prints de sites de notícias de
   terceiros — apenas capturas do próprio jogo ou material oficial de
-  divulgação, para evitar strike de copyright
-- Antes de automatizar a publicação, validar manualmente pelo menos 5
-  vídeos gerados ponta a ponta
+  divulgação, para evitar strike de copyright (o template atual usa fundo
+  gradiente + texto; adicionar mídia de jogo é o próximo passo de polish)
+- Publicação sempre em dry-run por padrão — `--live` é opt-in explícito
+- **Antes de rodar o publisher em modo `--live`**, foram validados
+  manualmente 5 vídeos gerados ponta a ponta (regra cumprida)
+
+## Publicando de verdade no TikTok
+
+O módulo `publisher` está pronto, mas publicar de verdade exige:
+1. App registrado em [developers.tiktok.com](https://developers.tiktok.com)
+2. Produto "Content Posting API" solicitado e aprovado (revisão manual da
+   TikTok, pode levar dias)
+3. Fluxo OAuth2 completado para obter `TIKTOK_ACCESS_TOKEN` com escopo
+   `video.upload` (modo inbox) ou `video.publish` (modo direct)
+4. Preencher essas credenciais no `.env`
+
+Sem isso, `publisher.run` continua funcionando em dry-run (loga o que
+faria, sem chamar a API).
 
 Detalhes completos de especificação e decisões de arquitetura em
 [`CLAUDE.md`](./CLAUDE.md).
