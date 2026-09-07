@@ -37,6 +37,7 @@ def run_pipeline(
     publish_dry_run: bool = True,
     publish_mode: str = "inbox",
     render_video: bool = True,
+    skip_publisher: bool = False,
 ) -> dict:
     """Roda o pipeline completo uma vez. Retorna um resumo com contagens por etapa."""
     summary = {}
@@ -55,10 +56,14 @@ def run_pipeline(
     logger.info("=== Etapa 4/5: video_gen ===")
     summary["videos"] = video_gen_run.run(db_path=db_path, limit=limit, render=render_video)
 
-    logger.info("=== Etapa 5/5: publisher (dry_run=%s) ===", publish_dry_run)
-    summary["published"] = publisher_run.run(
-        db_path=db_path, limit=limit, mode=publish_mode, dry_run=publish_dry_run
-    )
+    if skip_publisher:
+        logger.info("=== Etapa 5/5: publisher PULADA (--skip-publisher) — upload manual pelo usuário ===")
+        summary["published"] = 0
+    else:
+        logger.info("=== Etapa 5/5: publisher (dry_run=%s) ===", publish_dry_run)
+        summary["published"] = publisher_run.run(
+            db_path=db_path, limit=limit, mode=publish_mode, dry_run=publish_dry_run
+        )
 
     logger.info("=== Pipeline finalizado: %s ===", summary)
     return summary
@@ -95,6 +100,16 @@ def main() -> None:
         default=True,
         help="Gera só áudio+spec, sem renderizar vídeo (útil sem Node/Remotion)",
     )
+    parser.add_argument(
+        "--skip-publisher",
+        action="store_true",
+        default=False,
+        help=(
+            "Pula a etapa 5 (publisher) completamente, nem em dry-run. "
+            "Use quando o upload pro TikTok será feito manualmente pelo usuário "
+            "a partir dos vídeos gerados em data/videos/."
+        ),
+    )
     args = parser.parse_args()
 
     run_pipeline(
@@ -104,6 +119,7 @@ def main() -> None:
         publish_dry_run=args.publish_dry_run,
         publish_mode=args.publish_mode,
         render_video=args.render_video,
+        skip_publisher=args.skip_publisher,
     )
 
 

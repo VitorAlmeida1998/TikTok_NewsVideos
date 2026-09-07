@@ -72,6 +72,21 @@ só loga o que faria). Para publicar de verdade:
 uv run python -m pipeline.run --limit 5 --publish-live --publish-mode inbox
 ```
 
+### Rodando só a geração de vídeo, sem publisher (fluxo atual do usuário)
+
+Quando o upload pro TikTok é feito manualmente (revisando os vídeos antes
+de postar), use `--skip-publisher` para pular a etapa 5 completamente —
+nem dry-run, nem chamada de API nenhuma:
+
+```bash
+uv run python -m pipeline.run --limit 5 --skip-publisher
+```
+
+É esse o comando configurado no `crontab -l` do sistema (a cada 30 min),
+rodando de forma totalmente autônoma sem qualquer sessão de IA/chat aberta.
+Os vídeos ficam prontos em `data/videos/item_N.mp4` para o usuário revisar
+e subir manualmente no app do TikTok.
+
 ### Etapas individuais
 
 ```bash
