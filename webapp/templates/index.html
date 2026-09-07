@@ -58,6 +58,9 @@
           {% else %}
             <span class="status-pill pending">não avaliada</span>
           {% endif %}
+          <div style="margin-top:8px;">
+            <a class="btn secondary" style="font-size:12px; padding:5px 10px;" href="{{ url_for('item_detail', item_id=item['id']) }}#media-upload">📎 Upload de vídeo/música</a>
+          </div>
         </div>
       </div>
     </div>

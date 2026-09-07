@@ -16,6 +16,79 @@
   <p style="color:#cfc9e8; font-size:14px;">{{ item['summary'] or '(sem resumo)' }}</p>
 </div>
 
+<a id="media-upload"></a>
+<div class="section-title">📎 Vídeo/música de fundo customizados</div>
+
+{% if not item['game_name'] %}
+  <div class="card" style="border-color:#ffcc00;">
+    <p>⚠️ Defina o <strong>nome do jogo</strong> na seção de Roteiro (mais abaixo) e salve antes de enviar arquivos — o upload é associado ao jogo pelo nome.</p>
+  </div>
+{% endif %}
+
+<div class="card">
+  <p class="section-title" style="margin:0 0 10px 0;">Vídeo de fundo (gameplay/trailer)</p>
+  {% if has_background %}
+    <p class="hint">Fundo atual ({{ "%.1f"|format(background_duration) if background_duration else "?" }}s):</p>
+    <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
+    <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}" style="margin-top:10px;">
+      <button type="submit" class="danger">🗑️ Remover fundo (volta a buscar automático)</button>
+    </form>
+  {% else %}
+    <p class="hint">Nenhum fundo customizado — o sistema busca automaticamente via trailer oficial no YouTube, ou usa gradiente padrão.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('upload_background', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
+    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
+    <div class="form-group">
+      <label>Enviar vídeo de fundo (upload)</label>
+      <input type="file" name="video_file" accept="video/*" required {{ 'disabled' if not item['game_name'] }}>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Início do trecho (segundos)</label>
+        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Duração do trecho (segundos)</label>
+        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
+      </div>
+    </div>
+    <button type="submit" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+  </form>
+</div>
+
+<div class="card">
+  <p class="section-title" style="margin:0 0 10px 0;">Música de fundo (OST/tema)</p>
+  {% if has_music %}
+    <p class="hint">Música atual ({{ "%.1f"|format(music_duration) if music_duration else "?" }}s):</p>
+    <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
+    <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}" style="margin-top:10px;">
+      <button type="submit" class="danger">🗑️ Remover música (volta a buscar automático)</button>
+    </form>
+  {% else %}
+    <p class="hint">Nenhuma música customizada — o sistema busca automaticamente a OST/tema do jogo no YouTube.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('upload_music', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
+    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
+    <div class="form-group">
+      <label>Enviar música de fundo (upload)</label>
+      <input type="file" name="audio_file" accept="audio/*" required {{ 'disabled' if not item['game_name'] }}>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Início do trecho (segundos)</label>
+        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Duração do trecho (segundos)</label>
+        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
+      </div>
+    </div>
+    <button type="submit" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+  </form>
+</div>
+
 <div class="section-title">Roteiro</div>
 <div class="card">
   {% if not item['script_body'] %}
@@ -47,71 +120,6 @@
     {% endif %}
   </form>
   <div id="script-job-status"></div>
-</div>
-
-<div class="section-title">Vídeo de fundo (gameplay/trailer)</div>
-<div class="card">
-  {% if has_background %}
-    <p class="hint">Fundo atual ({{ "%.1f"|format(background_duration) if background_duration else "?" }}s):</p>
-    <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
-    <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}" style="margin-top:10px;">
-      <button type="submit" class="danger">🗑️ Remover fundo (volta a buscar automático)</button>
-    </form>
-  {% else %}
-    <p class="hint">Nenhum fundo customizado — o sistema busca automaticamente via trailer oficial no YouTube, ou usa gradiente padrão.</p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('upload_background', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
-    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
-    <div class="form-group">
-      <label>Enviar vídeo de fundo (upload)</label>
-      <input type="file" name="video_file" accept="video/*" required>
-    </div>
-    <div class="row">
-      <div class="form-group">
-        <label>Início do trecho (segundos)</label>
-        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
-      </div>
-      <div class="form-group">
-        <label>Duração do trecho (segundos)</label>
-        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
-      </div>
-    </div>
-    <p class="hint">O jogo precisa estar definido no roteiro acima para o upload ser associado corretamente.</p>
-    <button type="submit">⬆️ Enviar e cortar</button>
-  </form>
-</div>
-
-<div class="section-title">Música de fundo (OST/tema)</div>
-<div class="card">
-  {% if has_music %}
-    <p class="hint">Música atual ({{ "%.1f"|format(music_duration) if music_duration else "?" }}s):</p>
-    <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
-    <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}" style="margin-top:10px;">
-      <button type="submit" class="danger">🗑️ Remover música (volta a buscar automático)</button>
-    </form>
-  {% else %}
-    <p class="hint">Nenhuma música customizada — o sistema busca automaticamente a OST/tema do jogo no YouTube.</p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('upload_music', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
-    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
-    <div class="form-group">
-      <label>Enviar música de fundo (upload)</label>
-      <input type="file" name="audio_file" accept="audio/*" required>
-    </div>
-    <div class="row">
-      <div class="form-group">
-        <label>Início do trecho (segundos)</label>
-        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
-      </div>
-      <div class="form-group">
-        <label>Duração do trecho (segundos)</label>
-        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
-      </div>
-    </div>
-    <button type="submit">⬆️ Enviar e cortar</button>
-  </form>
 </div>
 
 <div class="section-title">Vídeo final</div>
