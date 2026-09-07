@@ -86,6 +86,8 @@ def _prepare_manual_clip(source_path: Path, game_name: str, timeout: int, runner
         str(source_path),
         "-vf",
         "crop=ih*9/16:ih,scale=1080:1920",
+        "-r",
+        "30",
         "-an",
         "-t",
         str(CLIP_DURATION_SECONDS),
@@ -170,6 +172,9 @@ def download_trailer_clip(
         return None
 
     # Recorta/escala para 9:16 (1080x1920): crop central + scale.
+    # -r 30 força frame rate constante (CFR) igual ao da composição Remotion
+    # (FPS=30 em Root.tsx) — trailers do YouTube costumam vir com frame rate
+    # variável (VFR), que causa flicker/frames pretos piscando no render.
     crop_cmd = [
         "ffmpeg",
         "-y",
@@ -177,6 +182,8 @@ def download_trailer_clip(
         str(raw_path),
         "-vf",
         "crop=ih*9/16:ih,scale=1080:1920",
+        "-r",
+        "30",
         "-an",  # remove áudio do trailer (a narração TTS é o áudio principal)
         "-t",
         str(CLIP_DURATION_SECONDS),

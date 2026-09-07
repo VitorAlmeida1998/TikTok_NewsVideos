@@ -2,7 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
-  Video,
+  OffthreadVideo,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
@@ -61,6 +61,14 @@ const Background: React.FC = () => (
 // Fundo de gameplay/trailer em loop, com overlay escuro por cima para
 // manter o texto e as legendas legíveis (contraste consistente,
 // independente do brilho do clipe original).
+//
+// Usa OffthreadVideo em vez de Video: o componente <Video> depende do
+// elemento <video> do navegador para extrair cada frame durante o
+// render, o que falha em "seekar" corretamente em clipes baixados via
+// yt-dlp (frame rate variável/VFR), causando flicker/frames pretos
+// piscando, principalmente perto do loop. OffthreadVideo extrai o frame
+// exato via ffmpeg (fora da thread do navegador), evitando esse bug —
+// é a recomendação oficial do Remotion para renderização (não preview).
 const GAMEPLAY_CLIP_DURATION_SECONDS = 12;
 
 const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
@@ -70,7 +78,11 @@ const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
   return (
     <AbsoluteFill>
       <Loop durationInFrames={clipFrames} times={Math.ceil(durationInFrames / clipFrames)}>
-        <Video src={src} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <OffthreadVideo
+          src={src}
+          muted
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
       </Loop>
       <AbsoluteFill style={{ background: "rgba(10, 8, 30, 0.55)" }} />
     </AbsoluteFill>
