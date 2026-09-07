@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Tarefas — TikTok GameNews{% endblock %}
+{% block content %}
+
+<h2>Tarefas recentes</h2>
+
+{% if jobs %}
+  {% for job in jobs %}
+    <div class="card" style="{{ 'border-color:#ffcc00;' if job.id == highlight else '' }}">
+      <div class="item-row">
+        <div>
+          <p><strong>{{ job.kind }}</strong> <span class="hint">#{{ job.id }}</span></p>
+        </div>
+        <div>
+          <span class="job-status {{ job.status }}">{{ job.status }}</span>
+        </div>
+      </div>
+      {% if job.error %}
+        <p style="color:#ff9d9d;">{{ job.error }}</p>
+      {% endif %}
+      {% if job.result %}
+        <p class="hint">Resultado: {{ job.result }}</p>
+      {% endif %}
+      {% if job.log %}
+        <details {{ 'open' if job.id == highlight or job.status == 'running' }}>
+          <summary class="hint">Ver log</summary>
+          <pre class="job-log">{{ job.log[-3000:] }}</pre>
+        </details>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state"><p>Nenhuma tarefa executada ainda.</p></div>
+{% endif %}
+
+<script>
+  // Auto-refresh se houver alguma tarefa em execução
+  {% if jobs | selectattr('status', 'equalto', 'running') | list %}
+    setTimeout(() => location.reload(), 3000);
+  {% endif %}
+</script>
+
+{% endblock %}

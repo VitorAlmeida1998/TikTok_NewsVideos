@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TikTok GameNews{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>🎮 TikTok GameNews — Painel</h1>
+    <nav>
+      <a href="{{ url_for('index') }}">Notícias</a>
+      <a href="{{ url_for('jobs_page') }}">Tarefas</a>
+    </nav>
+  </header>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

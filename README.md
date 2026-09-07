@@ -111,6 +111,38 @@ Já instalado no crontab do sistema (a cada 30 min, dry-run):
 
 Verifique/edite com `crontab -e`. Logs em `logs/pipeline.log`.
 
+## Painel web (webapp/)
+
+Dashboard local em Flask para gerenciar o pipeline sem usar o terminal:
+listar/filtrar notícias por status, editar roteiro, disparar geração de
+roteiro/vídeo, e o principal — **upload de vídeo de fundo e música
+customizados por notícia, escolhendo o trecho exato (início + duração)**.
+
+```bash
+uv run python -m webapp.app
+# acesse http://localhost:5000 no navegador
+```
+
+Funcionalidades:
+- Lista de notícias com filtros (relevantes, sem roteiro, sem vídeo, vídeo
+  pronto) e busca por título/jogo, com paginação.
+- Botões para: buscar notícias novas (collector+dedupe), gerar roteiros em
+  lote, gerar vídeos em lote — cada ação roda em background (thread) com
+  log de progresso ao vivo, consultável na aba "Tarefas".
+- Página de detalhe de cada notícia: editar hook/corpo/CTA/nome do jogo
+  manualmente, ou gerar via IA com um clique; gerar/regenerar o vídeo
+  individualmente; preview do vídeo final direto no navegador.
+- **Upload de vídeo de fundo**: envie um arquivo de vídeo qualquer, escolha
+  o segundo de início e a duração do trecho — o sistema recorta/escala pra
+  9:16 (30fps constante, evita flicker) e salva como o fundo daquele jogo,
+  com prioridade sobre qualquer busca automática via yt-dlp.
+- **Upload de música de fundo**: mesma lógica, para a trilha sonora — envie
+  um MP3/WAV, escolha o trecho, ele vira a música daquele jogo.
+- Botão para remover o fundo/música customizado e voltar à busca automática.
+
+Ferramenta de uso pessoal/local, sem autenticação — não exponha na
+internet (é só para `localhost` da própria máquina).
+
 ## Estrutura do projeto
 
 ```

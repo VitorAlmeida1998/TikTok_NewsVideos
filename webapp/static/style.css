@@ -1,0 +1,246 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0f0c1e;
+  color: #e8e6f0;
+}
+
+a { color: #ffcc00; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+header.topbar {
+  background: linear-gradient(160deg, #0f0c29 0%, #302b63 100%);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #3a3560;
+}
+
+header.topbar h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+header.topbar nav a {
+  margin-left: 16px;
+  color: #cfc9e8;
+  font-size: 14px;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #1e1a38;
+  border: 1px solid #3a3560;
+  font-size: 13px;
+  color: #cfc9e8;
+}
+
+.badge.active {
+  background: #ffcc00;
+  color: #0f0c29;
+  font-weight: 700;
+  border-color: #ffcc00;
+}
+
+.badge .count {
+  font-weight: 700;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+input[type="text"], input[type="number"], textarea, select {
+  background: #1a1730;
+  border: 1px solid #3a3560;
+  color: #e8e6f0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+
+button, .btn {
+  background: #ffcc00;
+  color: #0f0c29;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button.secondary, .btn.secondary {
+  background: #2a2650;
+  color: #e8e6f0;
+  border: 1px solid #3a3560;
+}
+
+button.danger, .btn.danger {
+  background: #4a2030;
+  color: #ff9d9d;
+  border: 1px solid #6a3040;
+}
+
+button:hover, .btn:hover { opacity: 0.9; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card {
+  background: #1a1730;
+  border: 1px solid #2e2a52;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.item-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+}
+
+.item-meta {
+  font-size: 12px;
+  color: #9a94c0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pill.pending { background: #3a3560; color: #cfc9e8; }
+.status-pill.scripted { background: #2b4a3a; color: #8ee8b3; }
+.status-pill.video { background: #4a3a20; color: #ffcc00; }
+.status-pill.not-relevant { background: #2a2a2a; color: #888; }
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.pagination a, .pagination span {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: #1a1730;
+  border: 1px solid #3a3560;
+  font-size: 13px;
+}
+
+.pagination .current {
+  background: #ffcc00;
+  color: #0f0c29;
+  font-weight: 700;
+}
+
+.section-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #9a94c0;
+  margin: 24px 0 10px 0;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: #9a94c0;
+  margin-bottom: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.row > * { flex: 1; min-width: 160px; }
+
+video, audio {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+}
+
+.job-log {
+  background: #0a0818;
+  border: 1px solid #2e2a52;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.job-status {
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.job-status.running { background: #4a3a20; color: #ffcc00; }
+.job-status.done { background: #2b4a3a; color: #8ee8b3; }
+.job-status.error { background: #4a2030; color: #ff9d9d; }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6a6494;
+}
+
+.hint {
+  font-size: 12px;
+  color: #6a6494;
+  margin-top: 4px;
+}

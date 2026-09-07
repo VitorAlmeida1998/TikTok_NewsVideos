@@ -20,3 +20,4 @@ video_gen/manual_clips/*
 video_gen/manual_music/*
 !video_gen/manual_music/README.md
 logs/
+data/uploads_staging/

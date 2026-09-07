@@ -266,3 +266,135 @@ def save_publish_result(
         """,
         (publish_id, status, datetime.now(timezone.utc).isoformat(), item_id),
     )
+
+
+# --- Helpers para o front-end (webapp/) ---------------------------------
+
+
+def get_item(conn: sqlite3.Connection, item_id: int) -> sqlite3.Row | None:
+    """Retorna um único item pelo id, ou None se não existir."""
+    conn.row_factory = sqlite3.Row
+    return conn.execute("SELECT * FROM news_items WHERE id = ?", (item_id,)).fetchone()
+
+
+def list_items(
+    conn: sqlite3.Connection,
+    status: str | None = None,
+    search: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    """Lista itens com filtro opcional por status derivado e busca por título.
+
+    status aceito: "relevant" (is_relevant=1), "not_relevant" (is_relevant=0),
+    "unevaluated" (is_relevant IS NULL), "scripted" (tem roteiro),
+    "video_ready" (tem vídeo), "pending_script" (relevante sem roteiro),
+    "pending_video" (com roteiro sem vídeo). None = todos.
+    """
+    conn.row_factory = sqlite3.Row
+    clauses = []
+    params: list = []
+
+    status_clauses = {
+        "relevant": "is_relevant = 1",
+        "not_relevant": "is_relevant = 0",
+        "unevaluated": "is_relevant IS NULL",
+        "scripted": "script_body IS NOT NULL",
+        "video_ready": "video_path IS NOT NULL",
+        "pending_script": "is_relevant = 1 AND script_body IS NULL",
+        "pending_video": "script_body IS NOT NULL AND video_path IS NULL",
+    }
+    if status and status in status_clauses:
+        clauses.append(status_clauses[status])
+
+    if search:
+        clauses.append("(title LIKE ? OR game_name LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like])
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    query = f"""
+        SELECT * FROM news_items
+        {where}
+        ORDER BY collected_at DESC
+        LIMIT ? OFFSET ?
+    """
+    params.extend([limit, offset])
+    return conn.execute(query, params).fetchall()
+
+
+def count_items(conn: sqlite3.Connection, status: str | None = None, search: str | None = None) -> int:
+    """Conta itens com o mesmo filtro usado em list_items (para paginação)."""
+    clauses = []
+    params: list = []
+
+    status_clauses = {
+        "relevant": "is_relevant = 1",
+        "not_relevant": "is_relevant = 0",
+        "unevaluated": "is_relevant IS NULL",
+        "scripted": "script_body IS NOT NULL",
+        "video_ready": "video_path IS NOT NULL",
+        "pending_script": "is_relevant = 1 AND script_body IS NULL",
+        "pending_video": "script_body IS NOT NULL AND video_path IS NULL",
+    }
+    if status and status in status_clauses:
+        clauses.append(status_clauses[status])
+
+    if search:
+        clauses.append("(title LIKE ? OR game_name LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like])
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    row = conn.execute(f"SELECT COUNT(*) FROM news_items {where}", params).fetchone()
+    return row[0]
+
+
+def get_status_counts(conn: sqlite3.Connection) -> dict:
+    """Retorna contagens por status, para badges/filtros no dashboard."""
+    conn.row_factory = sqlite3.Row
+    counts = {}
+    counts["total"] = conn.execute("SELECT COUNT(*) FROM news_items").fetchone()[0]
+    counts["relevant"] = conn.execute(
+        "SELECT COUNT(*) FROM news_items WHERE is_relevant = 1"
+    ).fetchone()[0]
+    counts["unevaluated"] = conn.execute(
+        "SELECT COUNT(*) FROM news_items WHERE is_relevant IS NULL"
+    ).fetchone()[0]
+    counts["pending_script"] = conn.execute(
+        "SELECT COUNT(*) FROM news_items WHERE is_relevant = 1 AND script_body IS NULL"
+    ).fetchone()[0]
+    counts["pending_video"] = conn.execute(
+        "SELECT COUNT(*) FROM news_items WHERE script_body IS NOT NULL AND video_path IS NULL"
+    ).fetchone()[0]
+    counts["video_ready"] = conn.execute(
+        "SELECT COUNT(*) FROM news_items WHERE video_path IS NOT NULL"
+    ).fetchone()[0]
+    return counts
+
+
+def update_script(
+    conn: sqlite3.Connection, item_id: int, hook: str, body: str, cta: str, game_name: str
+) -> None:
+    """Atualiza manualmente o roteiro de um item (edição pelo usuário no front-end)."""
+    conn.execute(
+        """
+        UPDATE news_items
+        SET script_hook = ?, script_body = ?, script_cta = ?, game_name = ?
+        WHERE id = ?
+        """,
+        (hook, body, cta, game_name, item_id),
+    )
+
+
+def clear_video(conn: sqlite3.Connection, item_id: int) -> None:
+    """Limpa os campos de vídeo de um item, para forçar regeneração."""
+    conn.execute(
+        """
+        UPDATE news_items
+        SET audio_path = NULL, video_spec_path = NULL, video_path = NULL,
+            video_generated_at = NULL
+        WHERE id = ?
+        """,
+        (item_id,),
+    )
