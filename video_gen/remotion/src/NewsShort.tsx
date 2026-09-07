@@ -69,7 +69,12 @@ const Background: React.FC = () => (
 // piscando, principalmente perto do loop. OffthreadVideo extrai o frame
 // exato via ffmpeg (fora da thread do navegador), evitando esse bug —
 // é a recomendação oficial do Remotion para renderização (não preview).
-const GAMEPLAY_CLIP_DURATION_SECONDS = 12;
+//
+// GAMEPLAY_CLIP_DURATION_SECONDS precisa bater com CLIP_DURATION_SECONDS
+// em video_gen/gameplay.py — o clipe já vem longo (60s) para cobrir a
+// narração inteira sem repetir; o <Loop> só entra em ação de fato para
+// narrações excepcionalmente longas.
+const GAMEPLAY_CLIP_DURATION_SECONDS = 60;
 
 const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
   const { fps, durationInFrames } = useVideoConfig();
@@ -242,7 +247,9 @@ const CtaOverlay: React.FC<{ cta: string; showAfter: number }> = ({
 
 // Música de fundo (OST/tema do jogo) em loop, em volume baixo para não
 // competir com a narração — a narração é sempre a prioridade de mixagem.
-const MUSIC_CLIP_DURATION_SECONDS = 40;
+// MUSIC_CLIP_DURATION_SECONDS precisa bater com CLIP_DURATION_SECONDS em
+// video_gen/music.py.
+const MUSIC_CLIP_DURATION_SECONDS = 60;
 const MUSIC_VOLUME = 0.12;
 
 const BackgroundMusic: React.FC<{ src: string }> = ({ src }) => {

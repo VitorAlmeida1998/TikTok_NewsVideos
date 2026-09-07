@@ -41,7 +41,12 @@ CACHE_DIR = PROJECT_ROOT / "data" / "gameplay_cache"
 MANUAL_CLIPS_DIR = PROJECT_ROOT / "video_gen" / "manual_clips"
 
 CLIP_START_SECONDS = 8  # pula a intro/logo dos trailers
-CLIP_DURATION_SECONDS = 12  # clipe curto, suficiente para looping no vídeo
+# Duração do clipe baixado: longa o suficiente para cobrir a narração
+# inteira sem precisar repetir (loop) no meio do vídeo — narrações
+# costumam durar 20-40s, então 60s cobre a grande maioria sem "costura"
+# visível de loop. Só entra em loop se a narração for excepcionalmente
+# longa (>60s).
+CLIP_DURATION_SECONDS = 60
 
 # Extensões de vídeo aceitas para clipes manuais (qualquer uma que o ffmpeg leia).
 MANUAL_CLIP_EXTENSIONS = [".mp4", ".mov", ".mkv", ".webm", ".avi"]
@@ -104,7 +109,7 @@ def _prepare_manual_clip(source_path: Path, game_name: str, timeout: int, runner
 
 
 def download_trailer_clip(
-    game_name: str, timeout: int = 90, runner=None
+    game_name: str, timeout: int = 180, runner=None
 ) -> Path | None:
     """Retorna um clipe de fundo pronto (9:16) para o jogo, na seguinte ordem:
     1. Clipe manual do usuário (video_gen/manual_clips/) — processado e cacheado

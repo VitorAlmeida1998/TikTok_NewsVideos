@@ -45,7 +45,10 @@ CACHE_DIR = PROJECT_ROOT / "data" / "music_cache"
 MANUAL_MUSIC_DIR = PROJECT_ROOT / "video_gen" / "manual_music"
 
 CLIP_START_SECONDS = 5  # pula silêncio/intro de faixas de OST
-CLIP_DURATION_SECONDS = 40  # trecho suficiente pra cobrir/looping sob a narração
+# Duração da faixa baixada: longa o suficiente para cobrir a narração
+# inteira sem repetir (loop) no meio do vídeo. Precisa bater com
+# MUSIC_CLIP_DURATION_SECONDS em NewsShort.tsx.
+CLIP_DURATION_SECONDS = 60
 
 # Extensões de áudio aceitas para faixas manuais.
 MANUAL_MUSIC_EXTENSIONS = [".mp3", ".m4a", ".wav", ".ogg", ".flac"]
@@ -98,7 +101,7 @@ def _prepare_manual_track(source_path: Path, game_name: str, timeout: int, runne
     return final_path
 
 
-def download_ost_clip(game_name: str, timeout: int = 90, runner=None) -> Path | None:
+def download_ost_clip(game_name: str, timeout: int = 180, runner=None) -> Path | None:
     """Retorna um trecho de música de fundo pronto (mp3) para o jogo, nesta ordem:
     1. Faixa manual do usuário (video_gen/manual_music/) — processada e cacheada
        na primeira vez que for usada.

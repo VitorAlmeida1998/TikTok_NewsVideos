@@ -31,7 +31,7 @@ Qualquer formato que o ffmpeg lê: `.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`.
 ## O que acontece com o arquivo
 
 Na primeira vez que for usada, a faixa é automaticamente recortada pros
-primeiros ~40 segundos, convertida pra mp3 e salva em
+primeiros ~60 segundos, convertida pra mp3 e salva em
 `data/music_cache/<slug>.mp3` — não precisa editar o áudio manualmente
 antes de colocar aqui.
 
