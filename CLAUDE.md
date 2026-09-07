@@ -16,7 +16,7 @@ notícias BR.
 
 ```
 /collector       -> coleta de RSS/APIs de notícias            [FEITO]
-/dedupe          -> deduplicação e filtro de relevância        [TODO]
+/dedupe          -> deduplicação e filtro de relevância        [FEITO]
 /script_gen      -> geração de roteiro via LLM (Anthropic)     [TODO]
 /video_gen       -> TTS + legendas + imagens                   [TODO]
 /publisher       -> integração com TikTok                      [TODO]
@@ -62,20 +62,53 @@ Rodar via cron (a cada 10 min, exemplo):
 - `shared/models.py` — dataclass `NewsItem` com `content_hash` para dedupe
 - `shared/db.py` — conexão SQLite, schema, `save_item(s)`, `item_exists`
 
+## Módulo 2: Dedupe (concluído)
+
+O dedupe por conteúdo idêntico (hash de título+URL) já acontece na hora da
+coleta (`shared/db.save_item`, via `UNIQUE content_hash`). Este módulo cuida
+da segunda etapa: avaliar RELEVÂNCIA dos itens já salvos, por meio de um
+filtro de palavras-chave (leak, reveal, delay, launch, exclusive, trailer,
+release date, confirmed...). Idempotente: só avalia itens com
+`is_relevant IS NULL`, não reprocessa itens já avaliados.
+
+Rodar manualmente:
+
+```bash
+uv run python -m dedupe.run
+# ou com path customizado:
+uv run python -m dedupe.run --db data/news.db
+```
+
+### Arquivos
+
+- `dedupe/keyword_filter.py` — `DEFAULT_KEYWORDS`, `find_matched_keywords()`, `is_relevant()`
+- `dedupe/run.py` — orquestra: busca itens não avaliados, marca relevância no banco (CLI)
+- `shared/db.py` — colunas `is_relevant`, `matched_keywords`, `relevance_checked_at`
+  (migração automática e idempotente via `_apply_migrations`),
+  `get_unevaluated_items`, `mark_relevance`, `get_relevant_items`
+
 ## Testes
 
 ```bash
 uv run pytest -v
 ```
 
-14 testes, todos offline (fixture local em `tests/fixtures/sample_feed.xml`,
+28 testes, todos offline (fixture local em `tests/fixtures/sample_feed.xml`,
 banco SQLite em `tmp_path`, sem chamadas de rede).
 
-## Próximo módulo: Dedupe
+## Próximo módulo: Script Gen
 
-Hash de título/URL (já implementado em `NewsItem.content_hash` + dedupe no
-`save_item`) + filtro por palavras-chave de relevância (leak, reveal, delay,
-launch, exclusive).
+Pegar itens relevantes (`get_relevant_items`) e gerar roteiro em português
+via API da Anthropic (gancho + fato principal, formato curto para TikTok).
+
+## Módulo video_gen (decisão já tomada, implementar quando chegar a vez)
+
+Usar **Remotion** (React, self-hosted, renderização via CLI chamada por
+`subprocess`) em vez de APIs SaaS pagas (Creatomate/Shotstack/JSON2Video).
+TTS via ElevenLabs ou OpenAI TTS. Legendas sincronizadas via whisper.cpp
+local (timestamps por palavra a partir do áudio da narração), alimentando
+os componentes Remotion.
+
 
 ## Regras
 
