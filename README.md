@@ -179,7 +179,8 @@ diretório temporário) — nenhuma chamada de rede/custo é feita durante
 - **Banco de dados:** SQLite (dedupe, histórico, estado do pipeline)
 - **Coleta:** feedparser (RSS/Atom)
 - **Roteiro:** Claude Code CLI (`claude -p`), assinatura Pro/Max
-- **TTS:** ElevenLabs (`eleven_multilingual_v2`)
+- **TTS:** ElevenLabs (`eleven_multilingual_v2`), voice_settings tunados
+  para expressividade (stability baixa, style alto, speed ~1.08)
 - **Legendas:** faster-whisper (local, CPU, modelo `base`)
 - **Vídeo:** Remotion (React/TypeScript, Node.js), 1080x1920, render via CLI
 - **Publicação:** TikTok Content Posting API v2 (`open.tiktokapis.com`)

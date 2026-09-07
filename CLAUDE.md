@@ -25,8 +25,15 @@ BR veja a notícia em outro lugar.
   usa a assinatura Claude Pro/Max do usuário — NÃO usa a API paga por
   token (`ANTHROPIC_API_KEY` é removida do ambiente do subprocess para
   forçar login OAuth). Decisão tomada porque a API key paga estava sem
-  crédito e o usuário tem assinatura Pro.
-- **TTS (video_gen)**: ElevenLabs (`eleven_multilingual_v2`)
+  crédito e o usuário tem assinatura Pro. Prompt tunado para gerar texto
+  falado (não escrito): frases curtas, exclamações, reticências para
+  pausa dramática, contrações da fala brasileira ("tá", "pra", "cê") —
+  pensado pra soar como criador de conteúdo empolgado, não texto lido.
+- **TTS (video_gen)**: ElevenLabs (`eleven_multilingual_v2`), com
+  `voice_settings` tunados para expressividade: `stability=0.3` (mais
+  variação emocional), `style=0.65` (amplifica expressividade natural da
+  voz), `speed=1.08` (ritmo mais ágil). Voz configurável via
+  `ELEVENLABS_VOICE_ID` no `.env` sem precisar mexer em código.
 - **Legendas (video_gen)**: faster-whisper local (CPU, modelo `base`),
   timestamps por palavra
 - **Vídeo (video_gen)**: Remotion (React/TS, projeto Node.js em
