@@ -8,6 +8,8 @@ data/*.db
 data/audio/
 data/videos/
 data/video_specs/
+data/gameplay_cache/
 video_gen/remotion/node_modules/
 video_gen/remotion/public/audio/
+video_gen/remotion/public/background/
 video_gen/remotion/out/

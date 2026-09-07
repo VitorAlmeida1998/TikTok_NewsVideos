@@ -1,0 +1,99 @@
+"""Testes do módulo de gameplay/trailer (mock do subprocess runner, sem
+chamadas reais a yt-dlp/ffmpeg/YouTube)."""
+from unittest.mock import MagicMock
+
+from video_gen.gameplay import download_trailer_clip, find_cached_clip, slugify
+
+
+def test_slugify_normalizes_game_name():
+    assert slugify("Forza Horizon 6") == "forza-horizon-6"
+    assert slugify("Grand Theft Auto VI!!") == "grand-theft-auto-vi"
+    assert slugify("") == "unknown"
+
+
+def test_find_cached_clip_returns_none_when_missing(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+    assert find_cached_clip("Some Game") is None
+
+
+def test_find_cached_clip_returns_path_when_present(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+    cached_file = tmp_path / "some-game.mp4"
+    cached_file.write_bytes(b"fake")
+
+    result = find_cached_clip("Some Game")
+    assert result == cached_file
+
+
+def test_download_trailer_clip_returns_cached_without_calling_runner(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+    cached_file = tmp_path / "some-game.mp4"
+    cached_file.write_bytes(b"fake")
+
+    runner = MagicMock()
+    result = download_trailer_clip("Some Game", runner=runner)
+
+    assert result == cached_file
+    runner.assert_not_called()
+
+
+def test_download_trailer_clip_returns_none_on_download_failure(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+
+    fail_result = MagicMock()
+    fail_result.returncode = 1
+    fail_result.stderr = "video unavailable"
+    runner = MagicMock(return_value=fail_result)
+
+    result = download_trailer_clip("Nonexistent Game 12345", runner=runner)
+    assert result is None
+
+
+def test_download_trailer_clip_returns_none_on_exception(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+
+    def raising_runner(cmd, **kwargs):
+        raise RuntimeError("yt-dlp not found")
+
+    result = download_trailer_clip("Some Game", runner=raising_runner)
+    assert result is None
+
+
+def test_download_trailer_clip_success_creates_final_file(tmp_path, monkeypatch):
+    import video_gen.gameplay as gameplay_module
+
+    monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
+
+    call_count = {"n": 0}
+
+    def fake_runner(cmd, **kwargs):
+        call_count["n"] += 1
+        result = MagicMock()
+        result.returncode = 0
+        if call_count["n"] == 1:
+            # simula o yt-dlp criando o arquivo raw
+            raw_path = tmp_path / "some-game_raw.mp4"
+            raw_path.write_bytes(b"raw video data")
+        else:
+            # simula o ffmpeg criando o arquivo final
+            final_path = tmp_path / "some-game.mp4"
+            final_path.write_bytes(b"cropped video data")
+        return result
+
+    result = download_trailer_clip("Some Game", runner=fake_runner)
+
+    assert result is not None
+    assert result.name == "some-game.mp4"
+    assert result.exists()
+    assert not (tmp_path / "some-game_raw.mp4").exists()  # raw foi removido
+    assert call_count["n"] == 2  # yt-dlp + ffmpeg

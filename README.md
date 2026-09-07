@@ -36,6 +36,7 @@ legendas sincronizadas.
 - [uv](https://docs.astral.sh/uv/) para gerenciamento de dependências
 - Node.js 18+ e npm (para renderização de vídeo via Remotion)
 - ffmpeg (geralmente já presente no sistema)
+- [deno](https://deno.land) (runtime JS usado pelo yt-dlp para extrair vídeos do YouTube corretamente)
 - Claude Code CLI autenticado (`claude`) — usa sua assinatura Pro/Max para o `script_gen`, sem custo de API por token
 - Conta ElevenLabs com permissão `text_to_speech` habilitada na API key
 
@@ -130,10 +131,28 @@ evitando custo de API por token.
 1. Gera narração em áudio via ElevenLabs TTS
 2. Transcreve o áudio com `faster-whisper` (local, offline) para obter
    timestamps por palavra
-3. Monta um spec JSON (roteiro + timings) e chama `npx remotion render`
-4. O template Remotion (`video_gen/remotion/src/NewsShort.tsx`) renderiza
-   um vídeo vertical 1080x1920 com hook animado, legendas "karaokê"
-   palavra-a-palavra sincronizadas com o áudio, e CTA final
+3. Se o roteiro identificou um `game_name`, busca um trailer oficial no
+   YouTube via `yt-dlp` ("<jogo> official trailer"), baixa um trecho curto
+   (~12s) e recorta para 9:16 — usado como fundo em loop com overlay
+   escuro. Clipes ficam em cache (`data/gameplay_cache/`) por jogo, evitando
+   rebaixar. Se falhar ou não houver jogo identificado, usa fundo gradiente.
+4. Monta um spec JSON (roteiro + timings + fundo) e chama
+   `npx remotion render`
+5. O template Remotion (`video_gen/remotion/src/NewsShort.tsx`) renderiza
+   um vídeo vertical 1080x1920 com fundo de gameplay/trailer em loop (ou
+   gradiente), hook animado, legendas "karaokê" palavra-a-palavra
+   sincronizadas com o áudio, e CTA final
+
+### ⚠️ Nota sobre baixar clipes do YouTube (yt-dlp)
+
+O `video_gen/gameplay.py` baixa trechos curtos de trailers oficiais do
+YouTube via `yt-dlp`. Mesmo sendo material oficial do publisher/estúdio,
+baixar conteúdo do YouTube está numa área cinzenta em relação aos Termos de
+Serviço da plataforma. Mitigamos o risco usando apenas clipes curtos
+(~12s, sem áudio) como plano de fundo secundário — nunca o conteúdo
+principal do vídeo. Se isso for uma preocupação, a alternativa mais segura
+é substituir por uma biblioteca de capturas/clipes próprios do usuário (ver
+`video_gen/gameplay.py` para onde plugar isso).
 
 **publisher**: envia o vídeo pronto para a TikTok Content Posting API.
 - Modo `inbox` (padrão): envia como rascunho pra caixa de entrada do TikTok
@@ -175,8 +194,10 @@ diretório temporário) — nenhuma chamada de rede/custo é feita durante
   geração e publicação
 - Ao gerar vídeo, nunca usar imagens/prints de sites de notícias de
   terceiros — apenas capturas do próprio jogo ou material oficial de
-  divulgação, para evitar strike de copyright (o template atual usa fundo
-  gradiente + texto; adicionar mídia de jogo é o próximo passo de polish)
+  divulgação, para evitar strike de copyright. O fundo de vídeo agora usa
+  clipes de trailers OFICIAIS baixados via yt-dlp (busca "<jogo> official
+  trailer"), nunca gameplay de terceiros ou material jornalístico — ver
+  nota de risco de ToS abaixo
 - Publicação sempre em dry-run por padrão — `--live` é opt-in explícito
 - **Antes de rodar o publisher em modo `--live`**, foram validados
   manualmente 5 vídeos gerados ponta a ponta (regra cumprida)

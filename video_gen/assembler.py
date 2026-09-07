@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from video_gen.captions import transcribe_words
+from video_gen.gameplay import download_trailer_clip
 from video_gen.tts import synthesize_speech
 
 logger = logging.getLogger("video_gen")
@@ -17,6 +18,7 @@ logger = logging.getLogger("video_gen")
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "video_gen" / "remotion"
 REMOTION_PUBLIC_AUDIO_DIR = REMOTION_DIR / "public" / "audio"
+REMOTION_PUBLIC_BACKGROUND_DIR = REMOTION_DIR / "public" / "background"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "videos"
 AUDIO_DIR = PROJECT_ROOT / "data" / "audio"
 SPECS_DIR = PROJECT_ROOT / "data" / "video_specs"
@@ -36,11 +38,14 @@ def build_video_spec(
     words: list,
     source: str,
     title: str,
+    background_relative_path: str = "",
 ) -> dict:
     """Monta o dicionário de spec do vídeo (o que o componente Remotion consome).
 
-    `audio_relative_path` deve ser relativo à pasta public/ do projeto Remotion
-    (ex: "audio/item_1.mp3"), consumido via staticFile() no componente.
+    `audio_relative_path` e `background_relative_path` devem ser relativos à
+    pasta public/ do projeto Remotion (ex: "audio/item_1.mp3",
+    "background/forza-horizon-6.mp4"), consumidos via staticFile() no
+    componente. `background_relative_path` vazio = usa o fundo gradiente padrão.
     """
     return {
         "itemId": item_id,
@@ -50,6 +55,7 @@ def build_video_spec(
         "body": body,
         "cta": cta,
         "audioPath": audio_relative_path,
+        "backgroundVideoPath": background_relative_path,
         "words": [w.to_dict() if hasattr(w, "to_dict") else w for w in words],
     }
 
@@ -118,6 +124,26 @@ def generate_video_for_item(row, render: bool = True) -> dict:
     shutil.copyfile(audio_path, public_audio_path)
     audio_relative_path = f"audio/{audio_path.name}"
 
+    # Fundo de gameplay: busca trailer oficial do jogo (via yt-dlp) se
+    # game_name estiver disponível; usa fundo gradiente padrão se falhar
+    # ou se o item não tiver um jogo identificado.
+    background_relative_path = ""
+    game_name = row["game_name"] if "game_name" in row.keys() else None
+    if game_name:
+        clip_path = download_trailer_clip(game_name)
+        if clip_path:
+            REMOTION_PUBLIC_BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+            public_bg_path = REMOTION_PUBLIC_BACKGROUND_DIR / clip_path.name
+            if not public_bg_path.exists():
+                shutil.copyfile(clip_path, public_bg_path)
+            background_relative_path = f"background/{clip_path.name}"
+        else:
+            logger.info(
+                "Sem clipe de gameplay para '%s' (item %s), usando fundo padrão",
+                game_name,
+                item_id,
+            )
+
     spec = build_video_spec(
         item_id=item_id,
         hook=hook,
@@ -127,6 +153,7 @@ def generate_video_for_item(row, render: bool = True) -> dict:
         words=words,
         source=row["source"],
         title=row["title"],
+        background_relative_path=background_relative_path,
     )
     spec_path = write_spec(spec, item_id)
 

@@ -2,12 +2,14 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Video,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
   Easing,
   CalculateMetadataFunction,
+  Loop,
 } from "remotion";
 import { z } from "zod";
 
@@ -25,6 +27,7 @@ export const newsShortSchema = z.object({
   body: z.string(),
   cta: z.string(),
   audioPath: z.string(),
+  backgroundVideoPath: z.string().default(""),
   words: z.array(wordSchema),
 });
 
@@ -53,6 +56,25 @@ const Background: React.FC = () => (
     }}
   />
 );
+
+// Fundo de gameplay/trailer em loop, com overlay escuro por cima para
+// manter o texto e as legendas legíveis (contraste consistente,
+// independente do brilho do clipe original).
+const GAMEPLAY_CLIP_DURATION_SECONDS = 12;
+
+const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
+  const { fps, durationInFrames } = useVideoConfig();
+  const clipFrames = Math.round(GAMEPLAY_CLIP_DURATION_SECONDS * fps);
+
+  return (
+    <AbsoluteFill>
+      <Loop durationInFrames={clipFrames} times={Math.ceil(durationInFrames / clipFrames)}>
+        <Video src={src} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </Loop>
+      <AbsoluteFill style={{ background: "rgba(10, 8, 30, 0.55)" }} />
+    </AbsoluteFill>
+  );
+};
 
 const HookOverlay: React.FC<{ hook: string; source: string }> = ({
   hook,
@@ -210,6 +232,7 @@ export const NewsShort: React.FC<NewsShortProps> = ({
   cta,
   source,
   audioPath,
+  backgroundVideoPath,
   words,
 }) => {
   const ctaShowAfter =
@@ -218,10 +241,11 @@ export const NewsShort: React.FC<NewsShortProps> = ({
   // audioPath chega como um caminho relativo dentro de remotion/public/
   // (ex: "audio/item_1.mp3"), copiado pra lá pelo assembler.py antes do render.
   const audioSrc = audioPath ? staticFile(audioPath) : "";
+  const backgroundSrc = backgroundVideoPath ? staticFile(backgroundVideoPath) : "";
 
   return (
     <AbsoluteFill>
-      <Background />
+      {backgroundSrc ? <GameplayBackground src={backgroundSrc} /> : <Background />}
       {audioSrc ? <Audio src={audioSrc} /> : null}
       <HookOverlay hook={hook} source={source} />
       <WordCaptions words={words} />

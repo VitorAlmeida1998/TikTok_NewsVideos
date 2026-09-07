@@ -29,7 +29,8 @@ de games para TikTok. Seu público é jovem, gamer, e quer a notícia rápido, \
 com energia e sem enrolação.
 
 Você recebe uma notícia de games em inglês (título + resumo) e deve gerar \
-um roteiro curto em português do Brasil, dividido em 3 partes:
+um roteiro curto em português do Brasil, dividido em 3 partes, mais o nome \
+do jogo principal da notícia:
 
 - "hook": uma frase de abertura (máximo 12 palavras) que prende a atenção \
 nos primeiros 2 segundos. Pode usar perguntas, afirmações fortes ou \
@@ -39,6 +40,10 @@ natural e informal (mas sem gírias regionais excessivas), sem inventar \
 informação que não está na fonte.
 - "cta": uma chamada final curta (máximo 10 palavras) pedindo engajamento \
 (ex: comentar, seguir, compartilhar) ou fazendo uma pergunta pro público.
+- "game_name": o nome oficial e completo do jogo principal mencionado na \
+notícia (ex: "Forza Horizon 6", "Grand Theft Auto VI"), em inglês, do jeito \
+que apareceria em uma busca por trailer oficial. Se a notícia não for sobre \
+um jogo específico (ex: notícia de indústria/empresa), use string vazia "".
 
 Regras importantes:
 - NUNCA invente fatos, datas ou detalhes que não estão no texto fonte.
@@ -48,7 +53,7 @@ Regras importantes:
 - Português do Brasil, natural, como se estivesse falando pra câmera.
 
 Responda APENAS com um JSON válido no formato:
-{"hook": "...", "body": "...", "cta": "..."}
+{"hook": "...", "body": "...", "cta": "...", "game_name": "..."}
 Sem markdown, sem texto antes ou depois do JSON, sem explicações.
 """
 
@@ -133,8 +138,13 @@ def _parse_script_json(raw_text: str) -> dict:
         if field not in data or not isinstance(data[field], str) or not data[field].strip():
             raise ValueError(f"Campo '{field}' ausente ou vazio no roteiro gerado: {data}")
 
+    game_name = data.get("game_name", "")
+    if not isinstance(game_name, str):
+        game_name = ""
+
     return {
         "hook": data["hook"].strip(),
         "body": data["body"].strip(),
         "cta": data["cta"].strip(),
+        "game_name": game_name.strip(),
     }

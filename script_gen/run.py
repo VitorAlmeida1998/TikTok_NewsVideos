@@ -54,6 +54,7 @@ def run(db_path: str | None = None, model: str = DEFAULT_MODEL, limit: int | Non
                 body=script["body"],
                 cta=script["cta"],
                 model=model,
+                game_name=script.get("game_name", ""),
             )
             generated += 1
             logger.info("Roteiro gerado [item %s]: %s", row["id"], script["hook"])

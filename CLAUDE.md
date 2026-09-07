@@ -31,9 +31,16 @@ BR veja a notícia em outro lugar.
   timestamps por palavra
 - **Vídeo (video_gen)**: Remotion (React/TS, projeto Node.js em
   `video_gen/remotion/`), formato 1080x1920, renderizado via
-  `npx remotion render` chamado por subprocess. Assets de áudio precisam
-  estar dentro de `remotion/public/` (staticFile()) — paths absolutos do
-  filesystem NÃO funcionam diretamente no render do Remotion.
+  `npx remotion render` chamado por subprocess. Assets de áudio/vídeo de
+  fundo precisam estar dentro de `remotion/public/` (staticFile()) — paths
+  absolutos do filesystem NÃO funcionam diretamente no render do Remotion.
+- **Gameplay de fundo (video_gen)**: `yt-dlp` busca "<jogo> official
+  trailer" no YouTube, baixa um trecho curto (~12s, 1080p) via
+  `--download-sections`, recorta/escala pra 9:16 com ffmpeg, cacheia por
+  jogo em `data/gameplay_cache/`. Requer runtime `deno` instalado (yt-dlp
+  usa JS runtime pra extração correta do YouTube — sem ele funciona mas com
+  warnings e possível perda de formatos). Fallback: fundo gradiente se
+  `game_name` vazio ou download falhar.
 - **Publisher**: TikTok Content Posting API v2 (`open.tiktokapis.com`),
   modo inbox (draft, padrão) ou direct post. Dry-run por padrão.
 

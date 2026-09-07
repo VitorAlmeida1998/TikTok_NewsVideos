@@ -18,6 +18,7 @@ def test_generate_script_returns_parsed_dict():
         "hook": "Vaza data de lançamento antes da hora!",
         "body": "Segundo informações do site, o jogo foi confirmado para o próximo ano.",
         "cta": "Comenta aqui se você tava esperando isso!",
+        "game_name": "Some Game",
     }
     runner = _make_runner(json.dumps(payload))
 
@@ -32,7 +33,7 @@ def test_generate_script_returns_parsed_dict():
 
 
 def test_generate_script_strips_markdown_fences():
-    payload = {"hook": "h", "body": "b", "cta": "c"}
+    payload = {"hook": "h", "body": "b", "cta": "c", "game_name": ""}
     fenced = "```json\n" + json.dumps(payload) + "\n```"
     runner = _make_runner(fenced)
 
@@ -41,7 +42,7 @@ def test_generate_script_strips_markdown_fences():
 
 
 def test_generate_script_extracts_json_with_surrounding_text():
-    payload = {"hook": "h", "body": "b", "cta": "c"}
+    payload = {"hook": "h", "body": "b", "cta": "c", "game_name": ""}
     noisy = f"Aqui está o roteiro:\n{json.dumps(payload)}\nEspero que ajude!"
     runner = _make_runner(noisy)
 

@@ -37,6 +37,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("script_cta", "script_cta TEXT"),
     ("script_model", "script_model TEXT"),
     ("script_generated_at", "script_generated_at TEXT"),
+    ("game_name", "game_name TEXT"),
     ("audio_path", "audio_path TEXT"),
     ("video_spec_path", "video_spec_path TEXT"),
     ("video_path", "video_path TEXT"),
@@ -163,16 +164,17 @@ def save_script(
     body: str,
     cta: str,
     model: str,
+    game_name: str = "",
 ) -> None:
     """Grava o roteiro gerado (hook + corpo + call-to-action) para um item."""
     conn.execute(
         """
         UPDATE news_items
         SET script_hook = ?, script_body = ?, script_cta = ?,
-            script_model = ?, script_generated_at = ?
+            script_model = ?, script_generated_at = ?, game_name = ?
         WHERE id = ?
         """,
-        (hook, body, cta, model, datetime.now(timezone.utc).isoformat(), item_id),
+        (hook, body, cta, model, datetime.now(timezone.utc).isoformat(), game_name, item_id),
     )
 
 
