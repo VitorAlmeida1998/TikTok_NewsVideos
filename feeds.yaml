@@ -1,0 +1,14 @@
+# Lista de feeds RSS monitorados pelo collector.
+# name: identificador curto usado como "source" nos itens salvos
+# url: URL do feed RSS/Atom
+feeds:
+  - name: ign
+    url: https://feeds.ign.com/ign/games-all
+  - name: kotaku
+    url: https://kotaku.com/rss
+  - name: gamesindustry
+    url: https://www.gamesindustry.biz/feed
+  - name: pcgamer
+    url: https://www.pcgamer.com/rss/
+  - name: eurogamer
+    url: https://www.eurogamer.net/feed

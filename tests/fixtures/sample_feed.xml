@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Games News</title>
+    <link>https://example.com</link>
+    <description>Fixture feed for tests</description>
+
+    <item>
+      <title>Big Sequel Leaked Ahead of Official Reveal</title>
+      <link>https://example.com/news/big-sequel-leaked</link>
+      <description>Sources claim the long-awaited sequel has leaked online.</description>
+      <pubDate>Mon, 01 Sep 2025 10:00:00 GMT</pubDate>
+    </item>
+
+    <item>
+      <title>Studio Announces Exclusive Launch Date</title>
+      <link>https://example.com/news/exclusive-launch-date</link>
+      <description>The studio confirmed the exclusive title launches next month.</description>
+      <pubDate>Mon, 01 Sep 2025 12:30:00 GMT</pubDate>
+    </item>
+
+    <item>
+      <title>Popular RPG Delayed to Next Year</title>
+      <link>https://example.com/news/rpg-delayed</link>
+      <description>The publisher announced a delay for the highly anticipated RPG.</description>
+      <pubDate>Mon, 01 Sep 2025 15:45:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
