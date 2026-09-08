@@ -471,6 +471,29 @@ video, audio {
   display: block;
 }
 
+/* Preview em formato de celular: os vídeos gerados são 9:16 (TikTok/Shorts),
+   então sem isso um <video width:100%> dentro de um card largo de desktop
+   fica com centenas de pixels de altura (ex: 1000px de largura vira ~1780px
+   de altura). Limita a largura a um tamanho de tela de celular, com uma
+   moldura escura ao redor, e deixa a altura seguir a proporção real (9:16). */
+.phone-frame {
+  max-width: 260px;
+  margin: 0 auto;
+  padding: 10px;
+  background: #05040a;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.phone-frame video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
 .media-block { margin-bottom: 10px; }
 .media-block + form { margin-top: 14px; }
 

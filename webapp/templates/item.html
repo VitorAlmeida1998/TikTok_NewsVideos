@@ -100,7 +100,9 @@
     {% if has_background %}
       <div class="media-block">
         <p class="hint">Clipe salvo em cache — {{ "%.1f"|format(background_duration) if background_duration else "?" }}s</p>
-        <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
+        <div class="phone-frame">
+          <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
+        </div>
       </div>
       <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}">
         <button type="submit" class="danger sm">🗑️ Remover (volta a buscar automático)</button>
@@ -177,7 +179,9 @@
   <div class="card">
     {% if item['video_path'] %}
       <div class="media-block">
-        <video controls src="{{ url_for('media_video', item_id=item['id']) }}"></video>
+        <div class="phone-frame">
+          <video controls src="{{ url_for('media_video', item_id=item['id']) }}"></video>
+        </div>
       </div>
       <p class="hint">Gerado em {{ item['video_generated_at'] or '?' }}</p>
       <div class="row" style="margin-top:12px;">
