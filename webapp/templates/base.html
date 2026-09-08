@@ -8,13 +8,19 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>🎮 TikTok GameNews — Painel</h1>
+    <div class="brand">
+      <span class="logo">🎮</span>
+      <div class="brand-text">
+        <span class="title">TikTok GameNews</span>
+        <span class="subtitle">Painel de produção</span>
+      </div>
+    </div>
     <nav>
-      <a href="{{ url_for('index') }}">Notícias</a>
-      <a href="{{ url_for('jobs_page') }}">Tarefas</a>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">Notícias</a>
+      <a href="{{ url_for('jobs_page') }}" class="{{ 'active' if request.endpoint == 'jobs_page' }}">Tarefas</a>
     </nav>
   </header>
-  <div class="container">
+  <div class="container{% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </div>
 </body>

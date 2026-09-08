@@ -2,163 +2,215 @@
 {% block title %}#{{ item['id'] }} — {{ item['title'][:50] }}{% endblock %}
 {% block content %}
 
-<p><a href="{{ url_for('index') }}">&laquo; Voltar</a></p>
+<a class="back-link" href="{{ url_for('index') }}">‹ Voltar para notícias</a>
 
-<h2 style="margin-bottom:4px;">{{ item['title'] }}</h2>
-<div class="item-meta" style="margin-bottom:20px;">
-  <span>#{{ item['id'] }}</span>
-  <span>{{ item['source'] }}</span>
-  <span><a href="{{ item['url'] }}" target="_blank">fonte original ↗</a></span>
+<div class="page-head">
+  <div>
+    <h1 style="font-size:19px; max-width:720px;">{{ item['title'] }}</h1>
+    <div class="item-meta" style="margin-top:8px;">
+      <span class="source-tag">{{ item['source'] }}</span>
+      <span>#{{ item['id'] }}</span>
+      <a href="{{ item['url'] }}" target="_blank">fonte original ↗</a>
+    </div>
+  </div>
+  <div>
+    {% if item['video_path'] %}
+      <span class="status-pill video">vídeo pronto</span>
+    {% elif item['script_body'] %}
+      <span class="status-pill scripted">roteiro OK</span>
+    {% elif item['is_relevant'] == 1 %}
+      <span class="status-pill pending">relevante</span>
+    {% else %}
+      <span class="status-pill pending">não avaliada</span>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card">
-  <p><strong>Resumo original:</strong></p>
-  <p style="color:#cfc9e8; font-size:14px;">{{ item['summary'] or '(sem resumo)' }}</p>
+  <p class="summary-text">{{ item['summary'] or '(sem resumo disponível)' }}</p>
 </div>
 
-<a id="media-upload"></a>
-<div class="section-title">📎 Vídeo/música de fundo customizados</div>
-
 {% if not item['game_name'] %}
-  <div class="card" style="border-color:#ffcc00;">
-    <p>⚠️ Defina o <strong>nome do jogo</strong> na seção de Roteiro (mais abaixo) e salve antes de enviar arquivos — o upload é associado ao jogo pelo nome.</p>
+  <div class="card warn">
+    <p>⚠️ Defina o <strong>nome do jogo</strong> na aba Roteiro e salve antes de enviar mídia customizada — o upload é associado ao jogo pelo nome.</p>
   </div>
 {% endif %}
 
-<div class="card">
-  <p class="section-title" style="margin:0 0 10px 0;">Vídeo de fundo (gameplay/trailer)</p>
-  {% if has_background %}
-    <p class="hint">Fundo atual ({{ "%.1f"|format(background_duration) if background_duration else "?" }}s):</p>
-    <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
-    <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}" style="margin-top:10px;">
-      <button type="submit" class="danger">🗑️ Remover fundo (volta a buscar automático)</button>
-    </form>
-  {% else %}
-    <p class="hint">Nenhum fundo customizado — o sistema busca automaticamente via trailer oficial no YouTube, ou usa gradiente padrão.</p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('upload_background', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
-    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
-    <div class="form-group">
-      <label>Enviar vídeo de fundo (upload)</label>
-      <input type="file" name="video_file" accept="video/*" required {{ 'disabled' if not item['game_name'] }}>
-    </div>
-    <div class="row">
-      <div class="form-group">
-        <label>Início do trecho (segundos)</label>
-        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
-      </div>
-      <div class="form-group">
-        <label>Duração do trecho (segundos)</label>
-        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
-      </div>
-    </div>
-    <button type="submit" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
-  </form>
+<div class="tabs">
+  <button class="tab-btn active" data-tab="roteiro" onclick="switchTab('roteiro')">📝 Roteiro</button>
+  <button class="tab-btn" data-tab="midia" onclick="switchTab('midia')">📎 Mídia de fundo</button>
+  <button class="tab-btn" data-tab="video" onclick="switchTab('video')">🎬 Vídeo final</button>
 </div>
 
-<div class="card">
-  <p class="section-title" style="margin:0 0 10px 0;">Música de fundo (OST/tema)</p>
-  {% if has_music %}
-    <p class="hint">Música atual ({{ "%.1f"|format(music_duration) if music_duration else "?" }}s):</p>
-    <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
-    <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}" style="margin-top:10px;">
-      <button type="submit" class="danger">🗑️ Remover música (volta a buscar automático)</button>
-    </form>
-  {% else %}
-    <p class="hint">Nenhuma música customizada — o sistema busca automaticamente a OST/tema do jogo no YouTube.</p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('upload_music', item_id=item['id']) }}" enctype="multipart/form-data" style="margin-top:16px;">
-    <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
-    <div class="form-group">
-      <label>Enviar música de fundo (upload)</label>
-      <input type="file" name="audio_file" accept="audio/*" required {{ 'disabled' if not item['game_name'] }}>
-    </div>
-    <div class="row">
-      <div class="form-group">
-        <label>Início do trecho (segundos)</label>
-        <input type="number" name="start_seconds" value="0" min="0" step="0.5">
-      </div>
-      <div class="form-group">
-        <label>Duração do trecho (segundos)</label>
-        <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5">
-      </div>
-    </div>
-    <button type="submit" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
-  </form>
-</div>
-
-<div class="section-title">Roteiro</div>
-<div class="card">
-  {% if not item['script_body'] %}
-    <p class="hint">Este item ainda não tem roteiro.</p>
-    <button id="btn-gen-script" onclick="generateScript({{ item['id'] }})">📝 Gerar roteiro via IA</button>
-    <div id="script-job-status"></div>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('save_item_script', item_id=item['id']) }}">
-    <div class="form-group">
-      <label>Nome do jogo (usado para buscar fundo/música)</label>
-      <input type="text" name="game_name" value="{{ item['game_name'] or '' }}" style="width:100%; box-sizing:border-box;">
-    </div>
-    <div class="form-group">
-      <label>Hook (abertura)</label>
-      <textarea name="hook" rows="2">{{ item['script_hook'] or '' }}</textarea>
-    </div>
-    <div class="form-group">
-      <label>Corpo</label>
-      <textarea name="body" rows="4">{{ item['script_body'] or '' }}</textarea>
-    </div>
-    <div class="form-group">
-      <label>CTA (chamada final)</label>
-      <textarea name="cta" rows="2">{{ item['script_cta'] or '' }}</textarea>
-    </div>
-    <button type="submit" class="secondary">💾 Salvar roteiro</button>
-    {% if item['script_body'] %}
-      <button type="button" onclick="generateScript({{ item['id'] }})" class="secondary">🔄 Regerar via IA</button>
+<!-- ===================== ABA: ROTEIRO ===================== -->
+<div class="tab-panel active" id="tab-roteiro">
+  <div class="card">
+    {% if not item['script_body'] %}
+      <p class="hint" style="margin-bottom:12px;">Este item ainda não tem roteiro.</p>
+      <button onclick="generateScript({{ item['id'] }})">✨ Gerar roteiro via IA</button>
+      <hr class="sep">
     {% endif %}
-  </form>
-  <div id="script-job-status"></div>
+
+    <form method="post" action="{{ url_for('save_item_script', item_id=item['id']) }}">
+      <div class="form-group">
+        <label>Nome do jogo <span style="text-transform:none; font-weight:400;">— usado para buscar/salvar fundo e música</span></label>
+        <input type="text" name="game_name" value="{{ item['game_name'] or '' }}" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Hook (abertura)</label>
+        <textarea name="hook" rows="2">{{ item['script_hook'] or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Corpo</label>
+        <textarea name="body" rows="4">{{ item['script_body'] or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label>CTA (chamada final)</label>
+        <textarea name="cta" rows="2">{{ item['script_cta'] or '' }}</textarea>
+      </div>
+      <button type="submit" class="secondary">💾 Salvar roteiro</button>
+      {% if item['script_body'] %}
+        <button type="button" onclick="generateScript({{ item['id'] }})" class="ghost">✨ Regerar via IA</button>
+      {% endif %}
+    </form>
+    <div id="script-job-status" class="async-status"></div>
+  </div>
 </div>
 
-<div class="section-title">Vídeo final</div>
-<div class="card">
-  {% if item['video_path'] %}
-    <video controls src="{{ url_for('media_video', item_id=item['id']) }}"></video>
-    <p class="hint">Gerado em {{ item['video_generated_at'] or '?' }}</p>
-    <form method="post" action="{{ url_for('reset_item_video', item_id=item['id']) }}" style="display:inline;">
-      <button type="submit" class="secondary">🔄 Limpar (permite regenerar)</button>
-    </form>
-  {% else %}
-    <p class="hint">Vídeo ainda não gerado.</p>
-  {% endif %}
+<!-- ===================== ABA: MÍDIA DE FUNDO ===================== -->
+<div class="tab-panel" id="tab-midia">
+  <div class="section-title">🎞️ Vídeo de fundo (gameplay/trailer)</div>
+  <div class="card">
+    {% if has_background %}
+      <div class="media-block">
+        <p class="hint">Fundo atual — {{ "%.1f"|format(background_duration) if background_duration else "?" }}s</p>
+        <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
+      </div>
+      <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}">
+        <button type="submit" class="danger sm">🗑️ Remover (volta a buscar automático)</button>
+      </form>
+      <hr class="sep">
+    {% else %}
+      <p class="hint" style="margin-bottom:14px;">Nenhum fundo customizado — o sistema busca automaticamente via trailer oficial no YouTube, ou usa gradiente padrão.</p>
+    {% endif %}
 
-  {% if item['script_body'] %}
-    <button onclick="generateVideo({{ item['id'] }})" {{ 'disabled' if not item['script_body'] }}>🎬 Gerar/Regenerar vídeo</button>
-    <div id="video-job-status"></div>
-  {% endif %}
+    <form method="post" action="{{ url_for('upload_background', item_id=item['id']) }}" enctype="multipart/form-data">
+      <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
+      <div class="upload-zone">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Enviar vídeo de fundo</label>
+          <input type="file" name="video_file" accept="video/*" required {{ 'disabled' if not item['game_name'] }}>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label>Início do trecho (s)</label>
+            <input type="number" name="start_seconds" value="0" min="0" step="0.5" style="width:100%;">
+          </div>
+          <div class="form-group">
+            <label>Duração do trecho (s)</label>
+            <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5" style="width:100%;">
+          </div>
+        </div>
+      </div>
+      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+    </form>
+  </div>
+
+  <div class="section-title">🎵 Música de fundo (OST/tema)</div>
+  <div class="card">
+    {% if has_music %}
+      <div class="media-block">
+        <p class="hint">Música atual — {{ "%.1f"|format(music_duration) if music_duration else "?" }}s</p>
+        <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
+      </div>
+      <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}">
+        <button type="submit" class="danger sm">🗑️ Remover (volta a buscar automático)</button>
+      </form>
+      <hr class="sep">
+    {% else %}
+      <p class="hint" style="margin-bottom:14px;">Nenhuma música customizada — o sistema busca automaticamente a OST/tema do jogo no YouTube.</p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('upload_music', item_id=item['id']) }}" enctype="multipart/form-data">
+      <input type="hidden" name="game_name" value="{{ item['game_name'] or '' }}">
+      <div class="upload-zone">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Enviar música de fundo</label>
+          <input type="file" name="audio_file" accept="audio/*" required {{ 'disabled' if not item['game_name'] }}>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label>Início do trecho (s)</label>
+            <input type="number" name="start_seconds" value="0" min="0" step="0.5" style="width:100%;">
+          </div>
+          <div class="form-group">
+            <label>Duração do trecho (s)</label>
+            <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5" style="width:100%;">
+          </div>
+        </div>
+      </div>
+      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== ABA: VÍDEO FINAL ===================== -->
+<div class="tab-panel" id="tab-video">
+  <div class="card">
+    {% if item['video_path'] %}
+      <div class="media-block">
+        <video controls src="{{ url_for('media_video', item_id=item['id']) }}"></video>
+      </div>
+      <p class="hint">Gerado em {{ item['video_generated_at'] or '?' }}</p>
+      <div class="row" style="margin-top:12px;">
+        <button onclick="generateVideo({{ item['id'] }})">🔄 Regenerar vídeo</button>
+        <form method="post" action="{{ url_for('reset_item_video', item_id=item['id']) }}" style="flex:0;">
+          <button type="submit" class="secondary">🗑️ Limpar</button>
+        </form>
+      </div>
+    {% elif item['script_body'] %}
+      <p class="hint" style="margin-bottom:14px;">Roteiro pronto — gere o vídeo quando quiser.</p>
+      <button onclick="generateVideo({{ item['id'] }})">🎬 Gerar vídeo</button>
+    {% else %}
+      <p class="hint">Complete o roteiro na aba <strong>Roteiro</strong> antes de gerar o vídeo.</p>
+    {% endif %}
+    <div id="video-job-status" class="async-status"></div>
+  </div>
 </div>
 
 <script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (history.replaceState) history.replaceState(null, '', '#' + name);
+}
+
+(function initialTab() {
+  const hash = (location.hash || '').replace('#', '');
+  const valid = ['roteiro', 'midia', 'video'];
+  if (valid.includes(hash)) switchTab(hash);
+  else if (hash === 'media-upload') switchTab('midia'); // link antigo da lista principal
+})();
+
 function pollJob(jobId, statusElId, onDone) {
   const el = document.getElementById(statusElId);
   const interval = setInterval(async () => {
     try {
       const res = await fetch(`/api/jobs/${jobId}`);
       if (!res.ok) {
-        el.innerHTML = `<p style="color:#ff9d9d;">Não foi possível consultar o status da tarefa (HTTP ${res.status}).</p>`;
+        el.innerHTML = `<p class="msg-error">Não foi possível consultar o status da tarefa (HTTP ${res.status}).</p>`;
         clearInterval(interval);
         return;
       }
       const job = await res.json();
-      el.innerHTML = `<p>Status: <strong>${job.status}</strong></p><pre class="job-log">${(job.log || '').slice(-2000)}</pre>`;
+      const badgeClass = job.status === 'error' ? 'error' : (job.status === 'done' ? 'done' : 'running');
+      el.innerHTML = `<span class="job-status-badge ${badgeClass}">${job.status}</span><pre class="job-log" style="margin-top:8px;">${(job.log || '').slice(-2000)}</pre>`;
       if (job.status === 'done' || job.status === 'error') {
         clearInterval(interval);
         if (onDone) onDone(job);
       }
     } catch (err) {
-      el.innerHTML = `<p style="color:#ff9d9d;">Erro de conexão ao consultar a tarefa: ${err}</p>`;
+      el.innerHTML = `<p class="msg-error">Erro de conexão ao consultar a tarefa: ${err}</p>`;
       clearInterval(interval);
     }
   }, 1500);
@@ -167,9 +219,9 @@ function pollJob(jobId, statusElId, onDone) {
 async function generateScript(itemId) {
   const res = await fetch(`/item/${itemId}/generate-script`, { method: 'POST' });
   const data = await res.json();
+  const el = document.getElementById('script-job-status');
   if (!res.ok || !data.job_id) {
-    document.getElementById('script-job-status').innerHTML =
-      `<p style="color:#ff9d9d;">${data.error || 'Erro ao iniciar a tarefa.'}</p>`;
+    el.innerHTML = `<p class="msg-error">${data.error || 'Erro ao iniciar a tarefa.'}</p>`;
     return;
   }
   pollJob(data.job_id, 'script-job-status', (job) => {
@@ -182,7 +234,7 @@ async function generateVideo(itemId) {
   const data = await res.json();
   if (!res.ok || !data.job_id) {
     document.getElementById('video-job-status').innerHTML =
-      `<p style="color:#ff9d9d;">${data.error || 'Erro ao iniciar a tarefa.'}</p>`;
+      `<p class="msg-error">${data.error || 'Erro ao iniciar a tarefa.'}</p>`;
     return;
   }
   pollJob(data.job_id, 'video-job-status', (job) => {

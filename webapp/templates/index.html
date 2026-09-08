@@ -2,51 +2,62 @@
 {% block title %}Notícias — TikTok GameNews{% endblock %}
 {% block content %}
 
+<div class="page-head">
+  <div>
+    <h1>Notícias</h1>
+    <p class="sub">{{ total }} item{{ 's' if total != 1 }} encontrado{{ 's' if total != 1 }}{% if status %} · filtro ativo{% endif %}</p>
+  </div>
+</div>
+
 <div class="badges">
   <a class="badge {{ 'active' if not status }}" href="{{ url_for('index', q=search) }}">Todos <span class="count">{{ counts.total }}</span></a>
   <a class="badge {{ 'active' if status == 'relevant' }}" href="{{ url_for('index', status='relevant', q=search) }}">Relevantes <span class="count">{{ counts.relevant }}</span></a>
   <a class="badge {{ 'active' if status == 'unevaluated' }}" href="{{ url_for('index', status='unevaluated', q=search) }}">Não avaliadas <span class="count">{{ counts.unevaluated }}</span></a>
   <a class="badge {{ 'active' if status == 'pending_script' }}" href="{{ url_for('index', status='pending_script', q=search) }}">Sem roteiro <span class="count">{{ counts.pending_script }}</span></a>
   <a class="badge {{ 'active' if status == 'pending_video' }}" href="{{ url_for('index', status='pending_video', q=search) }}">Sem vídeo <span class="count">{{ counts.pending_video }}</span></a>
-  <a class="badge {{ 'active' if status == 'video_ready' }}" href="{{ url_for('index', status='video_ready', q=search) }}">Vídeo pronto <span class="count">{{ counts.video_ready }}</span></a>
+  <a class="badge {{ 'active' if status == 'video_ready' }}" href="{{ url_for('index', status='video_ready', q=search) }}">🎬 Vídeo pronto <span class="count">{{ counts.video_ready }}</span></a>
 </div>
 
 <div class="toolbar">
-  <form method="get" style="display:flex; gap:8px;">
+  <form method="get" class="search-form">
     {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
-    <input type="text" name="q" placeholder="Buscar por título ou jogo..." value="{{ search }}">
-    <button type="submit" class="secondary">Buscar</button>
+    <input type="text" name="q" placeholder="🔎 Buscar por título ou jogo..." value="{{ search }}">
   </form>
+
+  <div class="divider"></div>
 
   <form method="post" action="{{ url_for('collect') }}">
-    <button type="submit">🔄 Buscar notícias novas</button>
+    <button type="submit" class="secondary" title="Roda collector + dedupe">🔄 Buscar notícias</button>
   </form>
 
-  <form method="post" action="{{ url_for('bulk_generate_scripts') }}" style="display:flex; gap:6px;">
-    <input type="number" name="limit" value="5" min="1" max="50" style="width:60px;">
-    <button type="submit" class="secondary">📝 Gerar roteiros em lote</button>
+  <form method="post" action="{{ url_for('bulk_generate_scripts') }}">
+    <input type="number" name="limit" value="5" min="1" max="50" title="Quantidade">
+    <button type="submit" class="secondary">📝 Roteiros em lote</button>
   </form>
 
-  <form method="post" action="{{ url_for('bulk_generate_videos') }}" style="display:flex; gap:6px;">
-    <input type="number" name="limit" value="5" min="1" max="50" style="width:60px;">
-    <button type="submit" class="secondary">🎬 Gerar vídeos em lote</button>
+  <form method="post" action="{{ url_for('bulk_generate_videos') }}">
+    <input type="number" name="limit" value="5" min="1" max="50" title="Quantidade">
+    <button type="submit" class="secondary">🎬 Vídeos em lote</button>
   </form>
+
+  <div class="spacer"></div>
+  <a class="btn ghost sm" href="{{ url_for('jobs_page') }}">Ver tarefas →</a>
 </div>
 
 {% if items %}
-  {% for item in items %}
-    <div class="card">
-      <div class="item-row">
-        <div>
-          <p class="item-title"><a href="{{ url_for('item_detail', item_id=item['id']) }}">{{ item['title'] }}</a></p>
+  <div class="card flush">
+    {% for item in items %}
+      <div class="news-item">
+        <div class="main">
+          <a class="item-title" href="{{ url_for('item_detail', item_id=item['id']) }}" title="{{ item['title'] }}">{{ item['title'] }}</a>
           <div class="item-meta">
-            <span>#{{ item['id'] }}</span>
-            <span>{{ item['source'] }}</span>
+            <span class="source-tag">{{ item['source'] }}</span>
             {% if item['game_name'] %}<span>🎮 {{ item['game_name'] }}</span>{% endif %}
-            <span>{{ item['collected_at'][:16] if item['collected_at'] else '' }}</span>
+            <span>{{ item['collected_at'][:16].replace('T', ' ') if item['collected_at'] else '' }}</span>
+            <span>#{{ item['id'] }}</span>
           </div>
         </div>
-        <div>
+        <div class="side">
           {% if item['video_path'] %}
             <span class="status-pill video">vídeo pronto</span>
           {% elif item['script_body'] %}
@@ -58,25 +69,24 @@
           {% else %}
             <span class="status-pill pending">não avaliada</span>
           {% endif %}
-          <div style="margin-top:8px;">
-            <a class="btn secondary" style="font-size:12px; padding:5px 10px;" href="{{ url_for('item_detail', item_id=item['id']) }}#media-upload">📎 Upload de vídeo/música</a>
-          </div>
+          <a class="btn secondary sm" href="{{ url_for('item_detail', item_id=item['id']) }}">Abrir →</a>
         </div>
       </div>
-    </div>
-  {% endfor %}
+    {% endfor %}
+  </div>
 
   <div class="pagination">
     {% if page > 1 %}
-      <a href="{{ url_for('index', status=status, q=search, page=page-1) }}">« Anterior</a>
+      <a href="{{ url_for('index', status=status, q=search, page=page-1) }}">‹ Anterior</a>
     {% endif %}
     <span class="current">{{ page }} / {{ total_pages }}</span>
     {% if page < total_pages %}
-      <a href="{{ url_for('index', status=status, q=search, page=page+1) }}">Próxima »</a>
+      <a href="{{ url_for('index', status=status, q=search, page=page+1) }}">Próxima ›</a>
     {% endif %}
   </div>
 {% else %}
   <div class="empty-state">
+    <div class="icon">🗞️</div>
     <p>Nenhuma notícia encontrada com esse filtro.</p>
   </div>
 {% endif %}
