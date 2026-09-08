@@ -51,6 +51,17 @@ def process_uploaded_video(
     duration_seconds = max(1.0, min(duration_seconds, MAX_CLIP_SECONDS))
     start_seconds = max(0.0, start_seconds)
 
+    source_duration = probe_duration_seconds(source_path)
+    if source_duration is None:
+        raise MediaProcessingError(
+            "Não foi possível ler o arquivo enviado — verifique se é um vídeo válido."
+        )
+    if start_seconds >= source_duration:
+        raise MediaProcessingError(
+            f"O início do trecho ({start_seconds:.1f}s) é maior ou igual à duração do "
+            f"vídeo enviado ({source_duration:.1f}s) — escolha um início menor."
+        )
+
     slug = slugify(game_name)
     GAMEPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     final_path = GAMEPLAY_CACHE_DIR / f"{slug}.mp4"
@@ -76,6 +87,14 @@ def process_uploaded_video(
     if not final_path.exists():
         raise MediaProcessingError("ffmpeg não gerou o arquivo final")
 
+    output_duration = probe_duration_seconds(final_path)
+    if not output_duration or output_duration < 0.5:
+        final_path.unlink(missing_ok=True)
+        raise MediaProcessingError(
+            "O corte resultou num arquivo vazio/inválido — verifique o início e a duração "
+            "do trecho em relação à duração real do vídeo enviado."
+        )
+
     logger.info(
         "Vídeo de fundo customizado salvo para '%s': %s (%.1fs a partir de %.1fs)",
         game_name,
@@ -100,6 +119,17 @@ def process_uploaded_audio(
     duration_seconds = max(1.0, min(duration_seconds, MAX_CLIP_SECONDS))
     start_seconds = max(0.0, start_seconds)
 
+    source_duration = probe_duration_seconds(source_path)
+    if source_duration is None:
+        raise MediaProcessingError(
+            "Não foi possível ler o arquivo enviado — verifique se é um áudio válido."
+        )
+    if start_seconds >= source_duration:
+        raise MediaProcessingError(
+            f"O início do trecho ({start_seconds:.1f}s) é maior ou igual à duração do "
+            f"áudio enviado ({source_duration:.1f}s) — escolha um início menor."
+        )
+
     slug = slugify(game_name)
     MUSIC_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     final_path = MUSIC_CACHE_DIR / f"{slug}.mp3"
@@ -119,6 +149,14 @@ def process_uploaded_audio(
 
     if not final_path.exists():
         raise MediaProcessingError("ffmpeg não gerou o arquivo final")
+
+    output_duration = probe_duration_seconds(final_path)
+    if not output_duration or output_duration < 0.5:
+        final_path.unlink(missing_ok=True)
+        raise MediaProcessingError(
+            "O corte resultou num arquivo vazio/inválido — verifique o início e a duração "
+            "do trecho em relação à duração real do áudio enviado."
+        )
 
     logger.info(
         "Música de fundo customizada salva para '%s': %s (%.1fs a partir de %.1fs)",

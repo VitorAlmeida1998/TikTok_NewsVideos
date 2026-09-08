@@ -40,6 +40,7 @@ from video_gen.gameplay import MANUAL_CLIPS_DIR, slugify
 from video_gen.music import CACHE_DIR as MUSIC_CACHE_DIR
 from webapp.jobs import job_manager
 from webapp.media import (
+    MediaProcessingError,
     clear_gameplay_cache,
     clear_music_cache,
     probe_duration_seconds,
@@ -94,8 +95,14 @@ def collect():
         evaluated, relevant = dedupe_run.run()
         return {"collected": collected, "evaluated": evaluated, "relevant": relevant}
 
-    job_id = job_manager.start("collect", _task)
-    return redirect(url_for("jobs_page", highlight=job_id))
+    try:
+        job_id = job_manager.start("collect", _task, key="collect")
+    except RuntimeError:
+        # já tem uma coleta em andamento — só leva pra tela de tarefas mesmo assim
+        pass
+    else:
+        return redirect(url_for("jobs_page", highlight=job_id))
+    return redirect(url_for("jobs_page"))
 
 
 @app.route("/bulk/generate-scripts", methods=["POST"])
@@ -106,7 +113,10 @@ def bulk_generate_scripts():
         generated = script_gen_run.run(limit=limit)
         return {"generated": generated}
 
-    job_id = job_manager.start("bulk_script", _task)
+    try:
+        job_id = job_manager.start("bulk_script", _task, key="bulk_script")
+    except RuntimeError:
+        return redirect(url_for("jobs_page"))
     return redirect(url_for("jobs_page", highlight=job_id))
 
 
@@ -118,7 +128,10 @@ def bulk_generate_videos():
         generated = video_gen_run.run(limit=limit)
         return {"generated": generated}
 
-    job_id = job_manager.start("bulk_video", _task)
+    try:
+        job_id = job_manager.start("bulk_video", _task, key="bulk_video")
+    except RuntimeError:
+        return redirect(url_for("jobs_page"))
     return redirect(url_for("jobs_page", highlight=job_id))
 
 
@@ -195,7 +208,10 @@ def generate_item_script(item_id: int):
             )
         return {"item_id": item_id, "hook": script["hook"]}
 
-    job_id = job_manager.start("generate_script", _task)
+    try:
+        job_id = job_manager.start("generate_script", _task, key=f"script:{item_id}")
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 409
     return jsonify({"job_id": job_id})
 
 
@@ -219,15 +235,25 @@ def generate_item_video(item_id: int):
             )
         return result
 
-    job_id = job_manager.start("generate_video", _task)
+    try:
+        job_id = job_manager.start("generate_video", _task, key=f"video:{item_id}")
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 409
     return jsonify({"job_id": job_id})
 
 
 @app.route("/item/<int:item_id>/reset-video", methods=["POST"])
 def reset_item_video(item_id: int):
     """Limpa o vídeo gerado do item, permitindo regenerar do zero (ex: após
-    trocar o fundo/música customizados)."""
+    trocar o fundo/música customizados). Também apaga os arquivos físicos
+    antigos (áudio/vídeo/spec) do disco, para não deixar órfãos acumulando
+    em data/videos, data/audio e data/video_specs."""
     with get_connection() as conn:
+        item = get_item(conn, item_id)
+        if item:
+            for path_str in (item["audio_path"], item["video_spec_path"], item["video_path"]):
+                if path_str:
+                    Path(path_str).unlink(missing_ok=True)
         clear_video(conn, item_id)
     return redirect(url_for("item_detail", item_id=item_id))
 
@@ -258,6 +284,14 @@ def upload_background(item_id: int):
         process_uploaded_video(
             tmp_path, game_name, start_seconds=start_seconds, duration_seconds=duration_seconds
         )
+    except MediaProcessingError as exc:
+        logger.warning("Falha ao processar vídeo enviado para '%s': %s", game_name, exc)
+        return (
+            f"Não foi possível processar o vídeo enviado — verifique se o arquivo não está "
+            f"corrompido e se o início/duração do trecho estão dentro da duração real do "
+            f"vídeo. Detalhe técnico: {exc}",
+            400,
+        )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
@@ -286,6 +320,14 @@ def upload_music(item_id: int):
     try:
         process_uploaded_audio(
             tmp_path, game_name, start_seconds=start_seconds, duration_seconds=duration_seconds
+        )
+    except MediaProcessingError as exc:
+        logger.warning("Falha ao processar áudio enviado para '%s': %s", game_name, exc)
+        return (
+            f"Não foi possível processar o áudio enviado — verifique se o arquivo não está "
+            f"corrompido e se o início/duração do trecho estão dentro da duração real do "
+            f"áudio. Detalhe técnico: {exc}",
+            400,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)

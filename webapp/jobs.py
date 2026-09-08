@@ -45,14 +45,23 @@ class Job:
 
 
 class _LogCapturingHandler(logging.Handler):
-    """Handler de logging que acumula texto num buffer para o job."""
+    """Handler de logging que acumula texto num buffer para o job.
 
-    def __init__(self, buffer: io.StringIO):
+    Filtra por thread: como o handler é anexado ao ROOT logger (global) para
+    capturar logs de qualquer módulo, jobs rodando em paralelo em threads
+    diferentes receberiam logs uns dos outros se não houvesse esse filtro
+    (o root logger é compartilhado pelo processo inteiro).
+    """
+
+    def __init__(self, buffer: io.StringIO, thread_id: int):
         super().__init__()
         self.buffer = buffer
+        self.thread_id = thread_id
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
 
     def emit(self, record: logging.LogRecord) -> None:
+        if record.thread != self.thread_id:
+            return
         try:
             self.buffer.write(self.format(record) + "\n")
         except Exception:
@@ -60,22 +69,47 @@ class _LogCapturingHandler(logging.Handler):
 
 
 class JobManager:
+    MAX_JOBS_KEPT = 200  # evita crescimento ilimitado de memória em uso prolongado
+
     def __init__(self) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+        self._active_keys: set[str] = set()
 
-    def start(self, kind: str, target, *args, **kwargs) -> str:
+    def _prune_locked(self) -> None:
+        """Remove os jobs mais antigos além do limite. Deve ser chamado com
+        self._lock já adquirido."""
+        if len(self._jobs) <= self.MAX_JOBS_KEPT:
+            return
+        ordered = sorted(self._jobs.values(), key=lambda j: j.created_at)
+        for job in ordered[: len(self._jobs) - self.MAX_JOBS_KEPT]:
+            self._jobs.pop(job.id, None)
+
+    def start(self, kind: str, target, *args, key: str | None = None, **kwargs) -> str:
         """Inicia uma função `target(*args, **kwargs)` numa thread, capturando
         os logs do root logger durante a execução. Retorna o job_id.
+
+        `key` opcional identifica o "recurso" afetado (ex: f"video:{item_id}")
+        — se já houver um job em execução com a mesma key, recusa iniciar um
+        novo (evita duas gerações simultâneas escrevendo nos mesmos arquivos
+        de saída, ex: dois cliques rápidos em "Gerar vídeo" no mesmo item).
+        Levanta RuntimeError nesse caso.
         """
-        job_id = uuid.uuid4().hex[:12]
-        job = Job(id=job_id, kind=kind)
         with self._lock:
+            if key is not None and key in self._active_keys:
+                raise RuntimeError(
+                    f"Já existe uma tarefa em execução para '{key}' — aguarde terminar."
+                )
+            job_id = uuid.uuid4().hex[:12]
+            job = Job(id=job_id, kind=kind)
             self._jobs[job_id] = job
+            if key is not None:
+                self._active_keys.add(key)
+            self._prune_locked()
 
         def _runner():
             buffer = io.StringIO()
-            handler = _LogCapturingHandler(buffer)
+            handler = _LogCapturingHandler(buffer, thread_id=threading.get_ident())
             root_logger = logging.getLogger()
             root_logger.addHandler(handler)
             try:
@@ -90,6 +124,9 @@ class JobManager:
                 root_logger.removeHandler(handler)
                 job.log = buffer.getvalue()
                 job.finished_at = time.time()
+                if key is not None:
+                    with self._lock:
+                        self._active_keys.discard(key)
 
         thread = threading.Thread(target=_runner, daemon=True)
         thread.start()

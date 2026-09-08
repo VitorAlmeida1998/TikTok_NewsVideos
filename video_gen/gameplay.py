@@ -53,7 +53,15 @@ MANUAL_CLIP_EXTENSIONS = [".mp4", ".mov", ".mkv", ".webm", ".avi"]
 
 
 def slugify(game_name: str) -> str:
+    """Normaliza o nome do jogo para um slug seguro de nome de arquivo.
+
+    Truncado em 100 caracteres: nomes de jogo absurdamente longos (ex: título
+    de notícia usado por engano como game_name) poderiam gerar um nome de
+    arquivo que excede o limite do filesystem (geralmente 255 bytes),
+    causando "File name too long" no ffmpeg ao salvar no cache.
+    """
     slug = re.sub(r"[^a-z0-9]+", "-", game_name.lower()).strip("-")
+    slug = slug[:100].strip("-")
     return slug or "unknown"
 
 

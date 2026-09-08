@@ -65,7 +65,15 @@ def get_db_path() -> str:
 def get_connection(db_path: str | None = None):
     path = db_path or get_db_path()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    # timeout maior + WAL: a webapp permite disparar várias ações em paralelo
+    # (collector, bulk script/video, ações por item), e algumas mantêm a
+    # conexão aberta por dezenas de segundos (ex: collector.run faz várias
+    # chamadas de rede antes do commit final). Sem isso, duas escritas
+    # concorrentes facilmente batem em "database is locked" com o timeout
+    # padrão de 5s. WAL permite leitores não bloquearem o escritor atual.
+    conn = sqlite3.connect(path, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     try:
         conn.executescript(SCHEMA)
         _apply_migrations(conn)
