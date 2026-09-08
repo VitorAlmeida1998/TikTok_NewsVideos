@@ -161,6 +161,7 @@ def item_detail(item_id: int):
     has_music = music_path is not None and music_path.exists()
     background_duration = probe_duration_seconds(background_path) if has_background else None
     music_duration = probe_duration_seconds(music_path) if has_music else None
+    narration_duration = probe_duration_seconds(item["audio_path"]) if item["audio_path"] else None
 
     return render_template(
         "item.html",
@@ -169,6 +170,7 @@ def item_detail(item_id: int):
         has_music=has_music,
         background_duration=background_duration,
         music_duration=music_duration,
+        narration_duration=narration_duration,
         slug=slug,
     )
 

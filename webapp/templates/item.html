@@ -79,11 +79,27 @@
 
 <!-- ===================== ABA: MÍDIA DE FUNDO ===================== -->
 <div class="tab-panel" id="tab-midia">
+  <div class="card" style="background:var(--bg-elevated); border-style:dashed;">
+    <p class="hint" style="font-size:13px; line-height:1.6;">
+      ℹ️ <strong>A duração do vídeo final é sempre automática</strong> — ela acompanha
+      exatamente o tamanho do áudio da narração (roteiro + TTS), não é configurável aqui.
+      {% if narration_duration %}
+        A narração deste item dura <strong>{{ "%.1f"|format(narration_duration) }}s</strong>.
+      {% else %}
+        A narração ainda não foi gerada (isso acontece ao gerar o vídeo, na aba
+        <strong>Vídeo final</strong>).
+      {% endif %}
+      Os campos abaixo controlam só o <strong>clipe de fundo/música que fica salvo em
+      cache</strong> — se ele for mais curto que a narração, repete em loop; se for mais
+      longo, sobra sem uso.
+    </p>
+  </div>
+
   <div class="section-title">🎞️ Vídeo de fundo (gameplay/trailer)</div>
   <div class="card">
     {% if has_background %}
       <div class="media-block">
-        <p class="hint">Fundo atual — {{ "%.1f"|format(background_duration) if background_duration else "?" }}s</p>
+        <p class="hint">Clipe salvo em cache — {{ "%.1f"|format(background_duration) if background_duration else "?" }}s</p>
         <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
       </div>
       <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}">
@@ -103,14 +119,15 @@
         </div>
         <div class="row">
           <div class="form-group">
-            <label>Início do trecho (s)</label>
+            <label>Início do corte no arquivo enviado (s)</label>
             <input type="number" name="start_seconds" value="0" min="0" step="0.5" style="width:100%;">
           </div>
           <div class="form-group">
-            <label>Duração do trecho (s)</label>
-            <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5" style="width:100%;">
+            <label>Duração do clipe salvo em cache (s)</label>
+            <input type="number" name="duration_seconds" value="{{ narration_duration|round(0, 'ceil')|int if narration_duration else 60 }}" min="1" max="180" step="0.5" style="width:100%;">
           </div>
         </div>
+        <p class="hint" style="margin-top:8px;">Não é a duração do vídeo final — é só quanto do arquivo enviado fica guardado como fundo. Recomendado: {{ "%.0f"|format(narration_duration) ~ "s ou mais (duração da narração), pra não repetir em loop." if narration_duration else "60s cobre a maioria das narrações." }}</p>
       </div>
       <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
     </form>
@@ -120,7 +137,7 @@
   <div class="card">
     {% if has_music %}
       <div class="media-block">
-        <p class="hint">Música atual — {{ "%.1f"|format(music_duration) if music_duration else "?" }}s</p>
+        <p class="hint">Clipe salvo em cache — {{ "%.1f"|format(music_duration) if music_duration else "?" }}s</p>
         <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
       </div>
       <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}">
@@ -140,14 +157,15 @@
         </div>
         <div class="row">
           <div class="form-group">
-            <label>Início do trecho (s)</label>
+            <label>Início do corte no arquivo enviado (s)</label>
             <input type="number" name="start_seconds" value="0" min="0" step="0.5" style="width:100%;">
           </div>
           <div class="form-group">
-            <label>Duração do trecho (s)</label>
-            <input type="number" name="duration_seconds" value="60" min="1" max="180" step="0.5" style="width:100%;">
+            <label>Duração do clipe salvo em cache (s)</label>
+            <input type="number" name="duration_seconds" value="{{ narration_duration|round(0, 'ceil')|int if narration_duration else 60 }}" min="1" max="180" step="0.5" style="width:100%;">
           </div>
         </div>
+        <p class="hint" style="margin-top:8px;">Não é a duração do vídeo final — é só quanto do arquivo enviado fica guardado como música. Recomendado: {{ "%.0f"|format(narration_duration) ~ "s ou mais (duração da narração), pra não repetir em loop." if narration_duration else "60s cobre a maioria das narrações." }}</p>
       </div>
       <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
     </form>
