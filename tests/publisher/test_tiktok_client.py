@@ -1,10 +1,13 @@
 """Testes do cliente TikTok (mock de requests.Session, sem chamadas reais)."""
+import time
 from unittest.mock import MagicMock
 
 import pytest
 
+import publisher.tiktok_client as tiktok_client
 from publisher.tiktok_client import (
     PublisherError,
+    _get_access_token,
     check_publish_status,
     post_video_direct,
     post_video_to_inbox,
@@ -99,8 +102,55 @@ def test_check_publish_status_returns_json():
 
 def test_missing_access_token_raises_publisher_error(tmp_path, monkeypatch):
     monkeypatch.delenv("TIKTOK_ACCESS_TOKEN", raising=False)
+    monkeypatch.setattr(tiktok_client, "load_tokens", lambda: None)
     video_path = tmp_path / "video.mp4"
     video_path.write_bytes(b"data")
 
     with pytest.raises(PublisherError):
         post_video_to_inbox(video_path)
+
+
+def test_get_access_token_uses_valid_stored_token(monkeypatch):
+    monkeypatch.setattr(
+        tiktok_client, "load_tokens", lambda: {"access_token": "stored-at", "expires_at": time.time() + 3600}
+    )
+    assert _get_access_token() == "stored-at"
+
+
+def test_get_access_token_refreshes_when_expired(monkeypatch):
+    monkeypatch.setenv("TIKTOK_CLIENT_KEY", "key")
+    monkeypatch.setenv("TIKTOK_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(
+        tiktok_client,
+        "load_tokens",
+        lambda: {"access_token": "old-at", "refresh_token": "old-rt", "expires_at": time.time() - 10},
+    )
+    monkeypatch.setattr(
+        tiktok_client,
+        "refresh_access_token",
+        lambda refresh_token, client_key, client_secret: {
+            "access_token": "new-at",
+            "refresh_token": "new-rt",
+            "expires_in": 86400,
+        },
+    )
+    saved = {}
+    monkeypatch.setattr(
+        tiktok_client,
+        "save_tokens",
+        lambda access_token, refresh_token, expires_in: saved.update(
+            access_token=access_token, refresh_token=refresh_token
+        ),
+    )
+
+    assert _get_access_token() == "new-at"
+    assert saved == {"access_token": "new-at", "refresh_token": "new-rt"}
+
+
+def test_get_access_token_falls_back_to_env_when_no_refresh_possible(monkeypatch):
+    monkeypatch.delenv("TIKTOK_CLIENT_KEY", raising=False)
+    monkeypatch.delenv("TIKTOK_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("TIKTOK_ACCESS_TOKEN", "manual-token")
+    monkeypatch.setattr(tiktok_client, "load_tokens", lambda: None)
+
+    assert _get_access_token() == "manual-token"

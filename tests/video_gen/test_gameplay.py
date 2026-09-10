@@ -164,20 +164,22 @@ def test_download_trailer_clip_success_creates_final_file(tmp_path, monkeypatch)
     monkeypatch.setattr(gameplay_module, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(gameplay_module, "MANUAL_CLIPS_DIR", tmp_path / "manual_empty")
 
-    call_count = {"n": 0}
+    calls = []
 
     def fake_runner(cmd, **kwargs):
-        call_count["n"] += 1
+        calls.append(cmd)
         result = MagicMock()
         result.returncode = 0
-        if call_count["n"] == 1:
+        result.stdout = ""
+        if "--print" in cmd:
+            # busca: 1º resultado com restrição de idade (sem linha), 2º ok
+            result.stdout = "abc123 200\n"
+        elif cmd[0] == "yt-dlp":
             # simula o yt-dlp criando o arquivo raw
-            raw_path = tmp_path / "some-game_raw.mp4"
-            raw_path.write_bytes(b"raw video data")
+            (tmp_path / "some-game_raw.mp4").write_bytes(b"raw video data")
         else:
             # simula o ffmpeg criando o arquivo final
-            final_path = tmp_path / "some-game.mp4"
-            final_path.write_bytes(b"cropped video data")
+            (tmp_path / "some-game.mp4").write_bytes(b"cropped video data")
         return result
 
     result = download_trailer_clip("Some Game", runner=fake_runner)
@@ -186,4 +188,9 @@ def test_download_trailer_clip_success_creates_final_file(tmp_path, monkeypatch)
     assert result.name == "some-game.mp4"
     assert result.exists()
     assert not (tmp_path / "some-game_raw.mp4").exists()  # raw foi removido
-    assert call_count["n"] == 2  # yt-dlp + ffmpeg
+    assert len(calls) == 3  # busca + download + ffmpeg
+    assert calls[0][1].startswith("ytsearch5:")
+    download = calls[1]
+    assert download[1] == "https://www.youtube.com/watch?v=abc123"
+    # 200s de vídeo: começa em 45% (90s), nunca no início
+    assert download[download.index("--download-sections") + 1] == "*90-150"

@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .env
 data/*.db
+data/*.db-*
+data/tiktok_tokens.json
 .pytest_cache/
 *.egg-info/
 data/audio/
@@ -21,3 +23,8 @@ video_gen/manual_music/*
 !video_gen/manual_music/README.md
 logs/
 data/uploads_staging/
+data/covers/
+data/voice_samples/
+data/settings.json
+data/watcher_status.json
+data/feed_cache.json

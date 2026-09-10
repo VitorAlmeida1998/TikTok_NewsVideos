@@ -16,6 +16,8 @@
   <div>
     {% if item['video_path'] %}
       <span class="status-pill video">vídeo pronto</span>
+    {% elif item['video_skip_reason'] %}
+      <span class="status-pill waiting">aguardando mídia</span>
     {% elif item['script_body'] %}
       <span class="status-pill scripted">roteiro OK</span>
     {% elif item['is_relevant'] == 1 %}
@@ -30,16 +32,33 @@
   <p class="summary-text">{{ item['summary'] or '(sem resumo disponível)' }}</p>
 </div>
 
+{% if item['video_skip_reason'] and not item['video_path'] %}
+  <div class="card warn">
+    <p>{{ icon('triangle-alert', size=16) }} O automático pulou este item: <strong>{{ item['video_skip_reason'] }}</strong>. Envie o que falta na aba <strong>Mídia de fundo</strong> — na próxima rodada do cron o vídeo sai sozinho (ou gere agora na aba Vídeo final).</p>
+  </div>
+{% endif %}
+
+{% if siblings %}
+  <div class="card warn">
+    <p>{{ icon('info', size=16) }}
+      <span>Outra{{ 's' if siblings|length != 1 }} notícia{{ 's' if siblings|length != 1 }} cobre{{ 'm' if siblings|length != 1 }} a <strong>mesma história</strong>:
+        {% for sibling in siblings %}<a href="{{ url_for('item_detail', item_id=sibling['id']) }}">#{{ sibling['id'] }} ({{ sibling['source'] }}{{ ' — já virou vídeo' if sibling['video_path'] }})</a>{{ ', ' if not loop.last }}{% endfor %}.
+        O automático gera vídeo só pra primeira de cada história.
+      </span>
+    </p>
+  </div>
+{% endif %}
+
 {% if not item['game_name'] %}
   <div class="card warn">
-    <p>⚠️ Defina o <strong>nome do jogo</strong> na aba Roteiro e salve antes de enviar mídia customizada — o upload é associado ao jogo pelo nome.</p>
+    <p>{{ icon('triangle-alert', size=16) }} Defina o <strong>nome do jogo</strong> na aba Roteiro e salve antes de enviar mídia customizada — o upload é associado ao jogo pelo nome.</p>
   </div>
 {% endif %}
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="roteiro" onclick="switchTab('roteiro')">📝 Roteiro</button>
-  <button class="tab-btn" data-tab="midia" onclick="switchTab('midia')">📎 Mídia de fundo</button>
-  <button class="tab-btn" data-tab="video" onclick="switchTab('video')">🎬 Vídeo final</button>
+  <button class="tab-btn active" data-tab="roteiro" onclick="switchTab('roteiro')">{{ icon('file-text') }} Roteiro</button>
+  <button class="tab-btn" data-tab="midia" onclick="switchTab('midia')">{{ icon('paperclip') }} Mídia de fundo</button>
+  <button class="tab-btn" data-tab="video" onclick="switchTab('video')">{{ icon('clapperboard') }} Vídeo final</button>
 </div>
 
 <!-- ===================== ABA: ROTEIRO ===================== -->
@@ -47,7 +66,7 @@
   <div class="card">
     {% if not item['script_body'] %}
       <p class="hint" style="margin-bottom:12px;">Este item ainda não tem roteiro.</p>
-      <button onclick="generateScript({{ item['id'] }})">✨ Gerar roteiro via IA</button>
+      <button onclick="generateScript({{ item['id'] }})">{{ icon('wand-2') }} Gerar roteiro via IA</button>
       <hr class="sep">
     {% endif %}
 
@@ -68,20 +87,47 @@
         <label>CTA (chamada final)</label>
         <textarea name="cta" rows="2">{{ item['script_cta'] or '' }}</textarea>
       </div>
-      <button type="submit" class="secondary">💾 Salvar roteiro</button>
+      <div class="form-group">
+        <label>Pronúncias <span style="text-transform:none; font-weight:400;">— termos em inglês e como a voz deve falar (só afeta o áudio; a legenda mostra o original). Formato: <code>Wolverine=Uólverin; Kingdom Hearts=Kíngdom Rárts</code></span></label>
+        <textarea name="pronunciations" rows="2">{{ item['script_pronunciations'] or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Descrição da publicação <span style="text-transform:none; font-weight:400;">— legenda + hashtags, pra colar direto no TikTok na hora de postar</span></label>
+        <textarea name="description" id="description-field" rows="3">{{ item['script_description'] or '' }}</textarea>
+        <button type="button" class="ghost sm" style="margin-top:6px;" onclick="copyDescription()">{{ icon('save', size=14) }} Copiar legenda</button>
+        <span id="copy-feedback" class="hint" style="margin-left:8px;"></span>
+      </div>
+      <button type="submit" class="secondary">{{ icon('save') }} Salvar roteiro</button>
       {% if item['script_body'] %}
-        <button type="button" onclick="generateScript({{ item['id'] }})" class="ghost">✨ Regerar via IA</button>
+        <button type="button" onclick="generateScript({{ item['id'] }})" class="ghost">{{ icon('wand-2') }} Regerar via IA</button>
       {% endif %}
     </form>
     <div id="script-job-status" class="async-status"></div>
   </div>
+
+  {% if seo_checks %}
+    <div class="section-title">{{ icon('list-checks', size=14) }} Checklist de SEO — {{ seo_passed }}/{{ seo_total }}</div>
+    <div class="card">
+      <ul class="seo-list">
+        {% for check in seo_checks %}
+          <li class="{{ 'ok' if check.ok else 'fail' }}">
+            <span class="seo-mark">{{ icon('check', size=13) if check.ok else icon('x', size=13) }}</span>
+            <span>
+              {{ check.label }}
+              {% if not check.ok and check.hint %}<span class="seo-hint">{{ check.hint }}</span>{% endif %}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
 </div>
 
 <!-- ===================== ABA: MÍDIA DE FUNDO ===================== -->
 <div class="tab-panel" id="tab-midia">
   <div class="card" style="background:var(--bg-elevated); border-style:dashed;">
-    <p class="hint" style="font-size:13px; line-height:1.6;">
-      ℹ️ <strong>A duração do vídeo final é sempre automática</strong> — ela acompanha
+    <p class="hint icon-inline" style="font-size:13px; line-height:1.6;">
+      {{ icon('info', size=15) }} <strong>A duração do vídeo final é sempre automática</strong> — ela acompanha
       exatamente o tamanho do áudio da narração (roteiro + TTS), não é configurável aqui.
       {% if narration_duration %}
         A narração deste item dura <strong>{{ "%.1f"|format(narration_duration) }}s</strong>.
@@ -95,17 +141,17 @@
     </p>
   </div>
 
-  <div class="section-title">🎞️ Vídeo de fundo (gameplay/trailer)</div>
+  <div class="section-title">{{ icon('film', size=14) }} Vídeo de fundo (gameplay/trailer)</div>
   <div class="card">
     {% if has_background %}
       <div class="media-block">
         <p class="hint">Clipe salvo em cache — {{ "%.1f"|format(background_duration) if background_duration else "?" }}s</p>
-        <div class="phone-frame">
-          <video controls src="{{ url_for('media_background', slug=slug) }}"></video>
+        <div class="phone-frame small">
+          <video controls playsinline src="{{ url_for('media_background', slug=slug) }}"></video>
         </div>
       </div>
       <form method="post" action="{{ url_for('clear_background', item_id=item['id']) }}">
-        <button type="submit" class="danger sm">🗑️ Remover (volta a buscar automático)</button>
+        <button type="submit" class="danger sm">{{ icon('trash-2', size=14) }} Remover (volta a buscar automático)</button>
       </form>
       <hr class="sep">
     {% else %}
@@ -131,11 +177,11 @@
         </div>
         <p class="hint" style="margin-top:8px;">Não é a duração do vídeo final — é só quanto do arquivo enviado fica guardado como fundo. Recomendado: {{ "%.0f"|format(narration_duration) ~ "s ou mais (duração da narração), pra não repetir em loop." if narration_duration else "60s cobre a maioria das narrações." }}</p>
       </div>
-      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>{{ icon('upload') }} Enviar e cortar</button>
     </form>
   </div>
 
-  <div class="section-title">🎵 Música de fundo (OST/tema)</div>
+  <div class="section-title">{{ icon('music', size=14) }} Música de fundo (OST/tema)</div>
   <div class="card">
     {% if has_music %}
       <div class="media-block">
@@ -143,7 +189,7 @@
         <audio controls src="{{ url_for('media_music', slug=slug) }}"></audio>
       </div>
       <form method="post" action="{{ url_for('clear_music', item_id=item['id']) }}">
-        <button type="submit" class="danger sm">🗑️ Remover (volta a buscar automático)</button>
+        <button type="submit" class="danger sm">{{ icon('trash-2', size=14) }} Remover (volta a buscar automático)</button>
       </form>
       <hr class="sep">
     {% else %}
@@ -169,7 +215,7 @@
         </div>
         <p class="hint" style="margin-top:8px;">Não é a duração do vídeo final — é só quanto do arquivo enviado fica guardado como música. Recomendado: {{ "%.0f"|format(narration_duration) ~ "s ou mais (duração da narração), pra não repetir em loop." if narration_duration else "60s cobre a maioria das narrações." }}</p>
       </div>
-      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>⬆️ Enviar e cortar</button>
+      <button type="submit" style="margin-top:12px;" {{ 'disabled' if not item['game_name'] }}>{{ icon('upload') }} Enviar e cortar</button>
     </form>
   </div>
 </div>
@@ -178,21 +224,32 @@
 <div class="tab-panel" id="tab-video">
   <div class="card">
     {% if item['video_path'] %}
-      <div class="media-block">
+      <div class="preview-layout">
         <div class="phone-frame">
-          <video controls src="{{ url_for('media_video', item_id=item['id']) }}"></video>
+          <div class="phone-notch"></div>
+          <video controls playsinline src="{{ url_for('media_video', item_id=item['id']) }}"></video>
         </div>
-      </div>
-      <p class="hint">Gerado em {{ item['video_generated_at'] or '?' }}</p>
-      <div class="row" style="margin-top:12px;">
-        <button onclick="generateVideo({{ item['id'] }})">🔄 Regenerar vídeo</button>
-        <form method="post" action="{{ url_for('reset_item_video', item_id=item['id']) }}" style="flex:0;">
-          <button type="submit" class="secondary">🗑️ Limpar</button>
-        </form>
+        <div class="preview-side">
+          <div class="section-title">{{ icon('clapperboard', size=14) }} Vídeo final</div>
+          <dl class="kv">
+            <dt>Gerado em</dt><dd>{{ item['video_generated_at'][:16].replace('T', ' ') if item['video_generated_at'] else '?' }}</dd>
+            <dt>Narração</dt><dd>{{ "%.1f"|format(narration_duration) ~ "s" if narration_duration else '?' }}</dd>
+            <dt>Fundo</dt><dd>{{ 'clipe do jogo' if has_background else 'gradiente (sem clipe)' }}</dd>
+            <dt>Música</dt><dd>{{ 'OST do jogo' if has_music else 'sem música' }}</dd>
+            <dt>Arquivo</dt><dd><code>{{ item['video_path'].split('/')[-1] }}</code></dd>
+          </dl>
+          <p class="hint">Preview em escala de celular (9:16). O arquivo real é 1080×1920.</p>
+          <div class="row" style="margin-top:14px;">
+            <button onclick="generateVideo({{ item['id'] }})">{{ icon('refresh-cw') }} Regenerar vídeo</button>
+            <form method="post" action="{{ url_for('reset_item_video', item_id=item['id']) }}" style="flex:0;">
+              <button type="submit" class="secondary">{{ icon('trash-2') }} Limpar</button>
+            </form>
+          </div>
+        </div>
       </div>
     {% elif item['script_body'] %}
       <p class="hint" style="margin-bottom:14px;">Roteiro pronto — gere o vídeo quando quiser.</p>
-      <button onclick="generateVideo({{ item['id'] }})">🎬 Gerar vídeo</button>
+      <button onclick="generateVideo({{ item['id'] }})">{{ icon('clapperboard') }} Gerar vídeo</button>
     {% else %}
       <p class="hint">Complete o roteiro na aba <strong>Roteiro</strong> antes de gerar o vídeo.</p>
     {% endif %}
@@ -236,6 +293,19 @@ function pollJob(jobId, statusElId, onDone) {
       clearInterval(interval);
     }
   }, 1500);
+}
+
+async function copyDescription() {
+  const field = document.getElementById('description-field');
+  const feedback = document.getElementById('copy-feedback');
+  try {
+    await navigator.clipboard.writeText(field.value);
+    feedback.textContent = 'Copiado!';
+  } catch (err) {
+    field.select();
+    feedback.textContent = 'Selecionado — use Ctrl+C pra copiar.';
+  }
+  setTimeout(() => { feedback.textContent = ''; }, 3000);
 }
 
 async function generateScript(itemId) {

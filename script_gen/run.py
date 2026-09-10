@@ -14,7 +14,7 @@ import sys
 from dotenv import load_dotenv
 
 from script_gen.generator import DEFAULT_MODEL, generate_script
-from shared.db import get_connection, get_items_pending_script, save_script
+from shared.db import get_connection, get_items_pending_script, get_recent_hooks, save_script
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,10 +23,16 @@ logging.basicConfig(
 logger = logging.getLogger("script_gen")
 
 
-def run(db_path: str | None = None, model: str = DEFAULT_MODEL, limit: int | None = None) -> int:
-    """Gera roteiros para itens relevantes ainda sem script. Retorna quantos foram gerados."""
+def run(
+    db_path: str | None = None,
+    model: str = DEFAULT_MODEL,
+    limit: int | None = None,
+    max_age_hours: float | None = None,
+) -> int:
+    """Gera roteiros para itens relevantes ainda sem script (mais relevantes
+    primeiro; `max_age_hours` ignora notícia antiga). Retorna quantos foram gerados."""
     with get_connection(db_path) as conn:
-        pending = get_items_pending_script(conn)
+        pending = get_items_pending_script(conn, max_age_hours=max_age_hours)
         if limit is not None:
             pending = pending[:limit]
 
@@ -40,6 +46,7 @@ def run(db_path: str | None = None, model: str = DEFAULT_MODEL, limit: int | Non
                     summary=row["summary"] or "",
                     source=row["source"],
                     model=model,
+                    recent_hooks=get_recent_hooks(conn),
                 )
             except Exception:
                 logger.exception(
@@ -55,6 +62,8 @@ def run(db_path: str | None = None, model: str = DEFAULT_MODEL, limit: int | Non
                 cta=script["cta"],
                 model=model,
                 game_name=script.get("game_name", ""),
+                description=script.get("description", ""),
+                pronunciations=script.get("pronunciations", ""),
             )
             generated += 1
             logger.info("Roteiro gerado [item %s]: %s", row["id"], script["hook"])
@@ -72,9 +81,12 @@ def main() -> None:
     parser.add_argument(
         "--limit", type=int, default=None, help="Limite de itens a processar nesta rodada"
     )
+    parser.add_argument(
+        "--max-age-hours", type=float, default=None, help="Ignora notícias coletadas há mais de N horas"
+    )
     args = parser.parse_args()
 
-    run(db_path=args.db, model=args.model, limit=args.limit)
+    run(db_path=args.db, model=args.model, limit=args.limit, max_age_hours=args.max_age_hours)
 
 
 if __name__ == "__main__":

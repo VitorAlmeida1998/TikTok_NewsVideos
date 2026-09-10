@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 
 from video_gen.gameplay import CACHE_DIR as GAMEPLAY_CACHE_DIR
-from video_gen.gameplay import slugify
+from video_gen.gameplay import slugify, unavailable_marker
 from video_gen.music import CACHE_DIR as MUSIC_CACHE_DIR
 
 logger = logging.getLogger("webapp.media")
@@ -194,8 +194,8 @@ def clear_gameplay_cache(game_name: str) -> None:
     forçando nova busca automática via yt-dlp na próxima geração de vídeo.
     """
     slug = slugify(game_name)
-    path = GAMEPLAY_CACHE_DIR / f"{slug}.mp4"
-    path.unlink(missing_ok=True)
+    (GAMEPLAY_CACHE_DIR / f"{slug}.mp4").unlink(missing_ok=True)
+    unavailable_marker(GAMEPLAY_CACHE_DIR, slug).unlink(missing_ok=True)
 
 
 def clear_music_cache(game_name: str) -> None:
@@ -203,5 +203,5 @@ def clear_music_cache(game_name: str) -> None:
     forçando nova busca automática via yt-dlp na próxima geração de vídeo.
     """
     slug = slugify(game_name)
-    path = MUSIC_CACHE_DIR / f"{slug}.mp3"
-    path.unlink(missing_ok=True)
+    (MUSIC_CACHE_DIR / f"{slug}.mp3").unlink(missing_ok=True)
+    unavailable_marker(MUSIC_CACHE_DIR, slug).unlink(missing_ok=True)

@@ -36,7 +36,17 @@ import logging
 import subprocess
 from pathlib import Path
 
-from video_gen.gameplay import slugify
+from video_gen.gameplay import (
+    SEARCH_RESULTS,
+    UNAVAILABLE_RETRY_HOURS,
+    YTDLP_OK_RETURNCODES,
+    find_youtube_candidate,
+    mark_unavailable,
+    recently_unavailable,
+    section_from_middle,
+    slugify,
+    unavailable_marker,
+)
 
 logger = logging.getLogger("video_gen.music")
 
@@ -44,7 +54,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 CACHE_DIR = PROJECT_ROOT / "data" / "music_cache"
 MANUAL_MUSIC_DIR = PROJECT_ROOT / "video_gen" / "manual_music"
 
-CLIP_START_SECONDS = 5  # pula silêncio/intro de faixas de OST
+# Trecho baixado começa no meio da faixa (ver MIDDLE_START_FRACTION em
+# gameplay.py): pula intro lenta/silêncio e pega a parte "cheia" do tema.
 # Duração da faixa baixada: longa o suficiente para cobrir a narração
 # inteira sem repetir (loop) no meio do vídeo. Precisa bater com
 # MUSIC_CLIP_DURATION_SECONDS em NewsShort.tsx.
@@ -133,32 +144,49 @@ def download_ost_clip(game_name: str, timeout: int = 180, runner=None) -> Path |
     raw_path = CACHE_DIR / f"{slug}_raw.m4a"
     final_path = CACHE_DIR / f"{slug}.mp3"
 
-    query = f"ytsearch1:{game_name} official soundtrack main theme"
-    section = f"*{CLIP_START_SECONDS}-{CLIP_START_SECONDS + CLIP_DURATION_SECONDS}"
+    if recently_unavailable(CACHE_DIR, slug):
+        logger.info("Busca de OST para '%s' falhou há menos de %dh, não tentando de novo",
+                    game_name, UNAVAILABLE_RETRY_HOURS)
+        return None
 
-    download_cmd = [
-        "yt-dlp",
-        query,
-        "--js-runtimes",
-        "deno",
-        "-f",
-        "bestaudio",
-        "--download-sections",
-        section,
-        "-o",
-        str(raw_path),
-    ]
+    query = f"ytsearch{SEARCH_RESULTS}:{game_name} official soundtrack main theme"
 
     try:
+        candidate = find_youtube_candidate(query, "!is_live", runner, timeout)
+        if candidate is None:
+            mark_unavailable(CACHE_DIR, slug)
+            logger.warning(
+                "Nenhuma OST extraível no YouTube para '%s'. Envie uma música pelo painel "
+                "ou coloque uma faixa manual em video_gen/manual_music/%s.mp3",
+                game_name,
+                slug,
+            )
+            return None
+        video_id, duration = candidate
+        section = section_from_middle(duration, CLIP_DURATION_SECONDS)
+        download_cmd = [
+            "yt-dlp",
+            f"https://www.youtube.com/watch?v={video_id}",
+            "--js-runtimes",
+            "deno",
+            "-f",
+            "bestaudio",
+            "--download-sections",
+            section,
+            "-o",
+            str(raw_path),
+        ]
+        logger.info("Baixando OST %s de '%s' (duração %.0fs, trecho %s)", video_id, game_name, duration, section)
         result = runner(download_cmd, timeout=timeout)
     except Exception:
         logger.exception("Falha ao rodar yt-dlp (áudio) para '%s'", game_name)
         return None
 
-    if result.returncode != 0 or not raw_path.exists():
+    if result.returncode not in YTDLP_OK_RETURNCODES or not raw_path.exists():
+        mark_unavailable(CACHE_DIR, slug)
         logger.warning(
             "yt-dlp não encontrou/baixou OST para '%s' (returncode=%s): %s. "
-            "Se for restrição de idade, coloque uma faixa manual em "
+            "Envie uma música pelo painel ou coloque uma faixa manual em "
             "video_gen/manual_music/%s.mp3",
             game_name,
             getattr(result, "returncode", "?"),
@@ -181,8 +209,13 @@ def download_ost_clip(game_name: str, timeout: int = 180, runner=None) -> Path |
     raw_path.unlink(missing_ok=True)
 
     if convert_result.returncode != 0 or not final_path.exists():
-        logger.warning("Falha ao converter faixa de áudio para '%s'", game_name)
+        logger.warning(
+            "Falha ao converter faixa de áudio para '%s': %s",
+            game_name,
+            getattr(convert_result, "stderr", "")[-400:],
+        )
         return None
 
+    unavailable_marker(CACHE_DIR, slug).unlink(missing_ok=True)
     logger.info("Faixa de música de fundo pronta para '%s': %s", game_name, final_path)
     return final_path

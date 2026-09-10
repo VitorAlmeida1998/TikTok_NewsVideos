@@ -4,6 +4,7 @@ collector -> dedupe -> script_gen -> video_gen -> publisher (dry-run por padrão
 
 Uso:
     uv run python -m pipeline.run [--limit N] [--publish-live] [--publish-mode inbox|direct]
+                                  [--require-media] [--max-age-hours H]
 
 Pensado para rodar via cron como um único job (em vez de 5 jobs separados).
 Cada etapa é idempotente e continua mesmo se uma etapa anterior não gerar
@@ -38,8 +39,14 @@ def run_pipeline(
     publish_mode: str = "inbox",
     render_video: bool = True,
     skip_publisher: bool = False,
+    require_media: bool = False,
+    max_age_hours: float | None = None,
 ) -> dict:
-    """Roda o pipeline completo uma vez. Retorna um resumo com contagens por etapa."""
+    """Roda o pipeline completo uma vez. Retorna um resumo com contagens por etapa.
+
+    `require_media` e `max_age_hours` são o "modo autônomo" (cron): só gera
+    vídeo com fundo + música presentes, e só pra notícia recente.
+    """
     summary = {}
 
     logger.info("=== Etapa 1/5: collector ===")
@@ -51,10 +58,18 @@ def run_pipeline(
     summary["relevant"] = relevant
 
     logger.info("=== Etapa 3/5: script_gen ===")
-    summary["scripted"] = script_gen_run.run(db_path=db_path, limit=limit)
+    summary["scripted"] = script_gen_run.run(
+        db_path=db_path, limit=limit, max_age_hours=max_age_hours
+    )
 
-    logger.info("=== Etapa 4/5: video_gen ===")
-    summary["videos"] = video_gen_run.run(db_path=db_path, limit=limit, render=render_video)
+    logger.info("=== Etapa 4/5: video_gen (require_media=%s) ===", require_media)
+    summary["videos"] = video_gen_run.run(
+        db_path=db_path,
+        limit=limit,
+        render=render_video,
+        require_media=require_media,
+        max_age_hours=max_age_hours,
+    )
 
     if skip_publisher:
         logger.info("=== Etapa 5/5: publisher PULADA (--skip-publisher) — upload manual pelo usuário ===")
@@ -110,6 +125,18 @@ def main() -> None:
             "a partir dos vídeos gerados em data/videos/."
         ),
     )
+    parser.add_argument(
+        "--require-media",
+        action="store_true",
+        default=False,
+        help="Só gera vídeo se tiver fundo de gameplay E música; o resto fica 'aguardando mídia'",
+    )
+    parser.add_argument(
+        "--max-age-hours",
+        type=float,
+        default=None,
+        help="Ignora notícias coletadas há mais de N horas (não gasta TTS com notícia velha)",
+    )
     args = parser.parse_args()
 
     run_pipeline(
@@ -120,6 +147,8 @@ def main() -> None:
         publish_mode=args.publish_mode,
         render_video=args.render_video,
         skip_publisher=args.skip_publisher,
+        require_media=args.require_media,
+        max_age_hours=args.max_age_hours,
     )
 
 

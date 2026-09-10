@@ -155,18 +155,17 @@ def test_download_ost_clip_success_creates_final_file(tmp_path, monkeypatch):
     monkeypatch.setattr(music_module, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(music_module, "MANUAL_MUSIC_DIR", tmp_path / "manual_empty")
 
-    call_count = {"n": 0}
+    calls = []
 
     def fake_runner(cmd, **kwargs):
-        call_count["n"] += 1
+        calls.append(cmd)
         result = MagicMock()
         result.returncode = 0
-        if call_count["n"] == 1:
-            raw_path = tmp_path / "some-game_raw.m4a"
-            raw_path.write_bytes(b"raw audio data")
-        else:
-            final_path = tmp_path / "some-game.mp3"
-            final_path.write_bytes(b"converted audio data")
+        result.stdout = "ost42 300.5\n" if "--print" in cmd else ""
+        if "--print" not in cmd and cmd[0] == "yt-dlp":
+            (tmp_path / "some-game_raw.m4a").write_bytes(b"raw audio data")
+        elif cmd[0] == "ffmpeg":
+            (tmp_path / "some-game.mp3").write_bytes(b"converted audio data")
         return result
 
     result = download_ost_clip("Some Game", runner=fake_runner)
@@ -175,4 +174,6 @@ def test_download_ost_clip_success_creates_final_file(tmp_path, monkeypatch):
     assert result.name == "some-game.mp3"
     assert result.exists()
     assert not (tmp_path / "some-game_raw.m4a").exists()  # raw foi removido
-    assert call_count["n"] == 2  # yt-dlp + ffmpeg
+    assert len(calls) == 3  # busca + download + ffmpeg
+    assert calls[1][1] == "https://www.youtube.com/watch?v=ost42"
+    assert calls[1][calls[1].index("--download-sections") + 1] == "*135-195"

@@ -10,7 +10,6 @@ Suficiente para uso pessoal single-user, que é o caso desta ferramenta.
 from __future__ import annotations
 
 import contextlib
-import io
 import logging
 import threading
 import time
@@ -44,8 +43,15 @@ class Job:
         }
 
 
+MAX_LOG_CHARS = 20_000  # só o fim interessa; evita job longo comer memória
+
+
 class _LogCapturingHandler(logging.Handler):
-    """Handler de logging que acumula texto num buffer para o job.
+    """Handler de logging que escreve direto no `job.log`, linha a linha.
+
+    Escrever no job a cada registro (em vez de despejar um buffer no fim) é o
+    que faz o log aparecer AO VIVO no painel: o polling lê `job.log` enquanto
+    a tarefa ainda roda.
 
     Filtra por thread: como o handler é anexado ao ROOT logger (global) para
     capturar logs de qualquer módulo, jobs rodando em paralelo em threads
@@ -53,9 +59,9 @@ class _LogCapturingHandler(logging.Handler):
     (o root logger é compartilhado pelo processo inteiro).
     """
 
-    def __init__(self, buffer: io.StringIO, thread_id: int):
+    def __init__(self, job: Job, thread_id: int):
         super().__init__()
-        self.buffer = buffer
+        self.job = job
         self.thread_id = thread_id
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
 
@@ -63,9 +69,11 @@ class _LogCapturingHandler(logging.Handler):
         if record.thread != self.thread_id:
             return
         try:
-            self.buffer.write(self.format(record) + "\n")
+            line = self.format(record) + "\n"
         except Exception:
-            pass
+            return
+        log = self.job.log + line
+        self.job.log = log[-MAX_LOG_CHARS:] if len(log) > MAX_LOG_CHARS else log
 
 
 class JobManager:
@@ -108,8 +116,7 @@ class JobManager:
             self._prune_locked()
 
         def _runner():
-            buffer = io.StringIO()
-            handler = _LogCapturingHandler(buffer, thread_id=threading.get_ident())
+            handler = _LogCapturingHandler(job, thread_id=threading.get_ident())
             root_logger = logging.getLogger()
             root_logger.addHandler(handler)
             try:
@@ -122,7 +129,6 @@ class JobManager:
                 job.status = "error"
             finally:
                 root_logger.removeHandler(handler)
-                job.log = buffer.getvalue()
                 job.finished_at = time.time()
                 if key is not None:
                     with self._lock:

@@ -124,3 +124,54 @@ def test_prune_keeps_only_max_jobs():
     assert len(mgr._jobs) <= 5
     # os mais recentes devem ter sobrevivido
     assert mgr.get(ids[-1]) is not None
+
+
+def test_log_is_visible_while_the_job_is_still_running():
+    """Regressão: o log era despejado só no fim, então a caixa de progresso do
+    painel ficava vazia durante toda a tarefa."""
+    import logging
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def _task():
+        logging.getLogger("video_gen").info("Áudio gerado")
+        logging.getLogger("video_gen").info("Render do item 1: 50%")
+        started.set()
+        release.wait(timeout=5)
+        return {"ok": True}
+
+    manager = JobManager()
+    job_id = manager.start("teste", _task)
+    assert started.wait(timeout=5)
+
+    running = manager.get(job_id)
+    assert running.status == "running"
+    assert "Áudio gerado" in running.log
+    assert "50%" in running.log
+
+    release.set()
+
+
+def test_log_keeps_only_the_tail_of_a_very_long_job():
+    import logging
+
+    from webapp.jobs import MAX_LOG_CHARS
+
+    def _task():
+        for i in range(2000):
+            logging.getLogger("video_gen").info("linha %d de progresso do render", i)
+        return {}
+
+    manager = JobManager()
+    job_id = manager.start("teste_longo", _task)
+    job = manager.get(job_id)
+    for _ in range(100):
+        if job.status != "running":
+            break
+        time.sleep(0.05)
+
+    assert job.status == "done"
+    assert len(job.log) <= MAX_LOG_CHARS
+    assert "linha 1999" in job.log  # o fim é o que interessa

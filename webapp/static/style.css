@@ -72,6 +72,7 @@ header.topbar {
   justify-content: center;
   background: linear-gradient(155deg, #ffcc00, #ff9d00);
   border-radius: 10px;
+  color: var(--accent-ink);
 }
 
 .brand-text {
@@ -202,6 +203,9 @@ header.topbar nav a.active { background: var(--accent); color: var(--accent-ink)
 
 .toolbar .search-form { flex: 1 1 240px; }
 .toolbar .search-form input[type="text"] { width: 100%; }
+.search-input-wrap { position: relative; display: flex; align-items: center; }
+.search-input-wrap .icon { position: absolute; left: 12px; color: var(--text-faint); pointer-events: none; }
+.search-input-wrap input[type="text"] { padding-left: 34px; }
 .toolbar .spacer { flex: 1 1 auto; }
 .toolbar .divider {
   width: 1px;
@@ -304,6 +308,8 @@ button.sm, .btn.sm { padding: 6px 11px; font-size: 12px; }
 .card.flush { padding: 0; overflow: hidden; }
 .card.highlight { border-color: var(--accent); }
 .card.warn { border-color: #6b5a1a; background: #241f0f; }
+.card.warn p { display: flex; align-items: flex-start; gap: 8px; }
+.card.warn .icon { color: var(--accent); margin-top: 1px; }
 
 /* ---------- News list ---------- */
 
@@ -441,6 +447,9 @@ button.sm, .btn.sm { padding: 6px 11px; font-size: 12px; }
 }
 
 .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: transparent;
   color: var(--text-dim);
@@ -471,28 +480,105 @@ video, audio {
   display: block;
 }
 
-/* Preview em formato de celular: os vídeos gerados são 9:16 (TikTok/Shorts),
-   então sem isso um <video width:100%> dentro de um card largo de desktop
-   fica com centenas de pixels de altura (ex: 1000px de largura vira ~1780px
-   de altura). Limita a largura a um tamanho de tela de celular, com uma
-   moldura escura ao redor, e deixa a altura seguir a proporção real (9:16). */
+/* Preview em formato de celular: os vídeos gerados são 9:16 (TikTok/Shorts).
+   A moldura tem largura FIXA (não max-width) e o <video> tem a proporção
+   travada em 9:16 com object-fit: contain — assim o preview nunca fica
+   esticado/cortado nem muda de tamanho conforme o card ao redor. Escala de
+   ~1/3 do arquivo real (1080x1920 -> 360x640). */
 .phone-frame {
-  max-width: 260px;
-  margin: 0 auto;
-  padding: 10px;
+  position: relative;
+  width: 360px;
+  max-width: 100%;
+  flex-shrink: 0;
+  padding: 12px;
   background: #05040a;
   border: 1px solid var(--border);
-  border-radius: 24px;
-  box-shadow: var(--shadow);
+  border-radius: 34px;
+  box-shadow: var(--shadow), inset 0 0 0 2px #17162b;
 }
 
+.phone-frame.small { width: 240px; border-radius: 26px; padding: 9px; margin: 0 auto; }
+
 .phone-frame video {
+  display: block;
   width: 100%;
-  height: auto;
   aspect-ratio: 9 / 16;
-  object-fit: cover;
-  border-radius: 14px;
+  height: auto;
+  object-fit: contain;
+  background: #000;
+  border-radius: 22px;
 }
+
+.phone-frame.small video { border-radius: 16px; }
+
+.phone-notch {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96px;
+  height: 22px;
+  background: #05040a;
+  border-radius: 999px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.preview-layout {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.preview-side { flex: 1 1 260px; min-width: 0; }
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0 0 10px 0;
+  font-size: 13px;
+}
+.kv dt { color: var(--text-faint); font-weight: 600; }
+.kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.kv code { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+
+.score-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.skip-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #f2b8b8;
+}
+
+.status-pill.waiting { background: #3a1a2a; color: #ff9cc2; }
+
+.watcher-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-card);
+  color: var(--text-dim);
+}
+.watcher-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.watcher-status.alive { color: var(--green); border-color: #1f4a2c; }
+.watcher-status.alive .dot { background: var(--green); animation: pulse 1.6s infinite; }
+.watcher-status.dead { color: var(--red); border-color: #5a2632; }
+.watcher-status.dead .dot { background: var(--red); }
+.badge.attention:not(.active) { border-color: #6b5a1a; color: var(--accent); }
 
 .media-block { margin-bottom: 10px; }
 .media-block + form { margin-top: 14px; }
@@ -602,6 +688,10 @@ details summary:hover { color: var(--accent); }
 
 .hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
 
+.icon { flex-shrink: 0; }
+.icon-inline { display: inline-flex; align-items: center; gap: 5px; }
+p.hint.icon-inline { align-items: flex-start; }
+
 hr.sep {
   border: none;
   border-top: 1px solid var(--border-soft);
@@ -622,3 +712,111 @@ hr.sep {
   .news-item .side { width: 100%; justify-content: space-between; }
   .toolbar { flex-direction: column; align-items: stretch; }
 }
+
+/* ---------- Fila de publicação ---------- */
+
+.publish-card {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.publish-main { flex: 1 1 340px; min-width: 0; }
+
+.phone-frame img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  height: auto;
+  object-fit: cover;
+  border-radius: 16px;
+  background: #000;
+}
+
+.publish-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+
+.publish-slot.stale {
+  color: var(--red);
+  font-size: 14px;
+}
+
+.publish-slot.now {
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.caption-box {
+  background: var(--bg-elevated);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* ---------- Checklist de SEO ---------- */
+
+.seo-list { list-style: none; margin: 0; padding: 0; }
+
+.seo-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.seo-list li:last-child { border-bottom: none; }
+.seo-list li.ok { color: var(--text-dim); }
+.seo-list li.fail { color: var(--text); }
+
+.seo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.seo-list li.ok .seo-mark { background: var(--green-bg); color: var(--green); }
+.seo-list li.fail .seo-mark { background: var(--red-bg); color: var(--red); }
+
+.seo-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+/* ---------- Vozes ---------- */
+
+.voice-card .voice-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.voice-card code { font-family: var(--mono); font-size: 11px; }
+.voice-card .status-pill { margin-left: 8px; }
+
+.voice-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.voice-card { padding: 14px 20px; }
+.voice-card audio { margin-top: 4px; }
+
+/* Fila compacta: dá pra bater o olho em vários vídeos sem rolar muito. */
+.publish-card .phone-frame { width: 170px; padding: 7px; border-radius: 20px; }
+.publish-card .phone-frame video,
+.publish-card .phone-frame img { border-radius: 13px; }

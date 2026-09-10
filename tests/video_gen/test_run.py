@@ -23,7 +23,7 @@ def make_scripted_item(conn, title: str, url: str) -> int:
     return row_id
 
 
-def _fake_result(row, render=True):
+def _fake_result(row, render=True, require_media=False):
     result = {
         "item_id": row["id"],
         "audio_path": f"/tmp/audio_{row['id']}.mp3",
@@ -67,7 +67,7 @@ def test_run_continues_when_one_item_fails(tmp_db_path):
         make_scripted_item(conn, "Good", "https://example.com/good")
         make_scripted_item(conn, "Bad", "https://example.com/bad")
 
-    def side_effect(row, render=True):
+    def side_effect(row, render=True, require_media=False):
         if row["title"] == "Bad":
             raise RuntimeError("tts error")
         return _fake_result(row, render)

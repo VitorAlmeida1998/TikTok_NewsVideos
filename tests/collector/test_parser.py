@@ -40,3 +40,52 @@ def test_parse_feed_empty_feed_returns_empty_list():
     """
     items = parse_feed(empty_feed, source_name="empty")
     assert items == []
+
+
+def _fake_response(status=200, content=b"", headers=None):
+    from unittest.mock import MagicMock
+
+    response = MagicMock()
+    response.status_code = status
+    response.content = content
+    response.headers = headers or {}
+    return response
+
+
+def test_fetch_feed_returns_no_items_when_server_answers_304(monkeypatch):
+    """304 = nada mudou: não reprocessa e preserva os validadores."""
+    import collector.parser as parser_module
+
+    monkeypatch.setattr(
+        parser_module.requests, "get", lambda *a, **kw: _fake_response(status=304)
+    )
+
+    result = parser_module.fetch_feed("https://e.com/f.xml", "src", etag="W/123", modified="ontem")
+
+    assert result.not_modified is True
+    assert result.items == []
+    assert result.etag == "W/123"
+    assert result.modified == "ontem"
+
+
+def test_fetch_feed_sends_validators_user_agent_and_timeout(monkeypatch, sample_feed_content):
+    import collector.parser as parser_module
+
+    captured = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return _fake_response(
+            content=sample_feed_content.encode("utf-8"), headers={"ETag": "novo-etag"}
+        )
+
+    monkeypatch.setattr(parser_module.requests, "get", fake_get)
+    result = parser_module.fetch_feed("https://e.com/f.xml", "src", etag="antigo", modified="data")
+
+    assert captured["headers"]["If-None-Match"] == "antigo"
+    assert captured["headers"]["If-Modified-Since"] == "data"
+    assert "TikTokGameNews" in captured["headers"]["User-Agent"]
+    assert captured["timeout"] == parser_module.DEFAULT_TIMEOUT
+    assert result.etag == "novo-etag"  # o novo validador substitui o antigo
+    assert result.items and result.items[0].source == "src"

@@ -1,0 +1,27 @@
+# Respelling fonético de termos em inglês pro TTS (ElevenLabs) falar como um
+# criador brasileiro fala, sem mudar o texto das legendas.
+#
+# Formato:  "Termo original": "como deve ser falado"
+# - Case-insensitive, casa palavra inteira (ou frase com várias palavras).
+# - Vale pra todos os vídeos. O script_gen também gera respellings por
+#   notícia (campo "Pronúncias" na aba Roteiro do painel) — em caso de
+#   conflito, este arquivo vence.
+# - Escreva o respelling em ortografia portuguesa, com acento marcando a
+#   sílaba tônica: "Wolverine" -> "Uólverin", "Dawnwalker" -> "Dón-uólquer".
+#
+# Comece pequeno e adicione só termos que você OUVIU sair errado.
+"Nintendo Direct": "Nintendo Dairéct"
+"Game Pass": "Gueim Pass"
+"Steam Deck": "Stim Dék"
+"Xbox Series X": "Écsbox Síris Écs"
+"Xbox Series S": "Écsbox Síris Éss"
+"DLC": "dê-éle-cê"
+"DualSense": "Dual-Sêns"
+"Elden Ring": "Élden Ring"
+"Half-Life": "Réf-Laif"
+"Halo": "Rêilou"
+"Hollow Knight": "Rólou Náit"
+"Marvel's Wolverine": "Márvels Uólverin"
+"Wolverine": "Uólverin"
+"Silent Hill": "Sáilent Ríl"
+"Dawnwalker": "Dón-uólquer"

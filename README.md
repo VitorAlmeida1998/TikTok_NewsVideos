@@ -26,7 +26,7 @@ legendas sincronizadas.
 | `collector` | ✅ pronto | Coleta feeds RSS, normaliza e salva com dedupe por hash |
 | `dedupe` | ✅ pronto | Filtro de relevância por palavras-chave |
 | `script_gen` | ✅ pronto | Roteiro em PT-BR via Claude Code CLI (assinatura Pro/Max) |
-| `video_gen` | ✅ pronto | TTS (ElevenLabs) + legendas (faster-whisper) + render (Remotion) |
+| `video_gen` | ✅ pronto | TTS (ElevenLabs, com timestamps por palavra + respelling de pronúncia) + render (Remotion) |
 | `publisher` | ✅ pronto | TikTok Content Posting API — **dry-run por padrão**, requer app aprovado pra publicar de verdade |
 | `pipeline` | ✅ pronto | Orquestrador end-to-end, todas as etapas em 1 comando |
 
@@ -82,6 +82,45 @@ nem dry-run, nem chamada de API nenhuma:
 uv run python -m pipeline.run --limit 5 --skip-publisher
 ```
 
+### Modo autônomo (deixar o PC ligado e chegar com os vídeos prontos)
+
+```bash
+uv run python -m pipeline.run --limit 5 --skip-publisher --require-media --max-age-hours 48
+```
+
+- **Ranking de relevância**: o `dedupe` dá uma pontuação a cada notícia
+  (peso das keywords — leak > exclusive/delay/release date > confirmed/reveal
+  > launch/trailer, mais gatilhos de compartilhamento como free/price/
+  cancelled/spoiler —, x1.5 se no título, bônus por franquia/plataforma de
+  hype tipo GTA/Nintendo/Switch 2/Zelda, e peso por fonte). A ordem da fila
+  usa **pontuação x frescor**: o valor decai com as horas desde a coleta
+  (72h derrubam pra 15%), porque notícia de games perde a vantagem rápido.
+  Roteiro e vídeo saem **do mais relevante pro menos**; `--limit` é por rodada.
+- **Uma história, um vídeo**: cinco feeds cobrem o mesmo fato ("Forza
+  atrasou no PS5" / "Forza NÃO atrasou"). O `dedupe` agrupa notícias
+  parecidas numa janela de 36h (`story_group`, similaridade de título) e o
+  pipeline só gera roteiro/vídeo para a primeira de cada história.
+- `--max-age-hours 48`: ignora notícia velha (não gasta TTS com o que já
+  passou).
+- `--require-media`: só renderiza se o jogo tiver **vídeo de fundo E música**
+  (cache, clipe manual ou download automático). Sem isso o item não gasta
+  TTS e fica marcado como **"aguardando mídia"** no painel, com o motivo —
+  você envia o fundo/música na página do item e a próxima rodada do cron
+  gera o vídeo sozinha. O `--limit` conta vídeos gerados, não tentativas.
+- Buscas no YouTube que falharem (ex: trailer com restrição de idade) não
+  são repetidas por 24h (`data/*_cache/<slug>.unavailable`); a busca tenta
+  os 5 primeiros resultados e fica com o primeiro que baixar. O trecho
+  baixado começa a **45% da duração** do vídeo/faixa — nunca no começo, que
+  em trailer é logo/classificação etária e em OST é intro lenta.
+- **Travas de custo** (`data/settings.json`): `max_videos_per_day` (padrão 3)
+  e `tts_reserve_chars` (2000). O monitor roda a cada 2 min e a fila de
+  notícias é sempre maior que a cota do ElevenLabs — sem essas travas um dia
+  de execução queima os créditos do mês inteiro. Uma narração média tem ~370
+  caracteres; o plano Starter (30k/mês) dá ~82 vídeos, ou ~2,7 por dia.
+- Cada vídeo sai com uma **capa** (`data/covers/item_N.png`): hook grande e
+  estático sobre um frame real do gameplay, pra usar como thumbnail no
+  upload (a capa é o que aparece na grade do perfil e na busca do TikTok).
+
 É esse o comando configurado no `crontab -l` do sistema (a cada 30 min),
 rodando de forma totalmente autônoma sem qualquer sessão de IA/chat aberta.
 Os vídeos ficam prontos em `data/videos/item_N.mp4` para o usuário revisar
@@ -98,18 +137,68 @@ uv run python -m publisher.run              # dry-run por padrão
 uv run python -m publisher.run --live       # publica de verdade (requer TIKTOK_ACCESS_TOKEN)
 ```
 
-Feeds padrão: IGN, Kotaku, GamesIndustry.biz, PC Gamer, Eurogamer. Edite
-`feeds.yaml` para adicionar/remover fontes.
+Feeds monitorados (13, em `feeds.yaml`): blogs **oficiais** PlayStation e
+Xbox (dão a notícia antes da imprensa), fontes de **furo/vazamento** (VGC,
+Insider Gaming), imprensa generalista (IGN, Eurogamer, GameSpot, Polygon,
+PC Gamer, Kotaku), plataformas (Nintendo Life, Push Square) e indústria
+(GamesIndustry.biz, com peso menor). O peso de cada fonte no ranking fica em
+`dedupe/keyword_filter.py` (`SOURCE_WEIGHTS`); fonte nova sem peso vale 1.0.
 
-### Rodando via cron
+A busca usa **GET condicional** (ETag/Last-Modified em `data/feed_cache.json`):
+o monitor checa a cada 2 min, e 8 dos 13 feeds respondem 304 quando nada
+mudou — sem isso seriam ~400 downloads completos por hora nos servidores dos
+portais. O User-Agent precisa ser no formato de leitor de RSS: com a palavra
+"bot" no meio, cinco desses portais respondem 403.
 
-Já instalado no crontab do sistema (a cada 30 min, dry-run):
+Ao avaliar um portal novo, olhe se ele **publica notícia** — agregadores de
+SEO (listicle, "códigos grátis", guia) só enchem a fila de ruído. Portais BR
+(IGN Brasil, Adrenaline, The Enemy) foram testados e deixados de fora de
+propósito: eles traduzem a notícia internacional, então cobrir o que eles
+publicam significa chegar depois — o oposto da proposta do canal.
 
-```cron
-*/30 * * * * cd /caminho/do/projeto && uv run python -m pipeline.run --limit 5 >> logs/pipeline.log 2>&1
+### Monitor contínuo ("tempo real") + cron
+
+`pipeline/watch.py` fica rodando o tempo todo: checa os feeds a cada 2 min
+e, quando entra notícia nova, ela passa na hora por ranking → roteiro →
+vídeo (modo autônomo: `--require-media`, `--max-age-hours 48`, até 3 por
+ciclo). RSS não tem push, então "tempo real" = polling curto. O painel mostra
+se o monitor está vivo e há quanto tempo checou (`data/watcher_status.json`).
+
+```bash
+scripts/watcher.sh --interval 120 --limit 3 --max-age-hours 48   # roda pra sempre
+uv run python -m pipeline.watch --once                            # um ciclo só
 ```
 
-Verifique/edite com `crontab -e`. Logs em `logs/pipeline.log`.
+Crontab instalado (`crontab -l`) — o cron é só o *watchdog* que religa o
+monitor se ele morrer (o `flock -n` sai na hora se já estiver rodando):
+
+```cron
+*/5 * * * * /caminho/do/projeto/scripts/watcher.sh --interval 120 --limit 3 --max-age-hours 48 >> /caminho/do/projeto/logs/watcher.log 2>&1
+@reboot sleep 20 && /caminho/do/projeto/scripts/webapp.sh >> /caminho/do/projeto/logs/webapp.log 2>&1
+```
+
+Os scripts em `scripts/` existem porque o cron roda com um `PATH` mínimo:
+sem eles `npx` (nvm), `claude` (~/.local/bin) e `yt-dlp` (venv/deno) não são
+encontrados. `scripts/pipeline_cron.sh` continua disponível pra rodar o
+pipeline em lote (uma rodada) com o mesmo PATH. Logs em `logs/watcher.log`.
+
+### Fila de publicação (upload manual em horário de pico)
+
+A publicação automática depende da Content Posting API aprovada (ver o fim
+deste README). Enquanto isso, a ferramenta diz **o que postar e quando**:
+cada vídeo pronto recebe um horário nos picos do público BR
+(`peak_slots`, padrão 12:15 / 18:45 / 21:15, fuso America/Sao_Paulo),
+respeitando `posts_per_day` e `min_gap_minutes`. Notícia **quente e fresca**
+(score ≥ `hot_score` e idade ≤ `hot_max_age_hours`) é marcada como
+**"postar agora"** — em notícia de games, chegar primeiro vale mais que o
+horário nobre. O monitor já agenda tudo sozinho ao fim de cada ciclo; a fila
+fica em `/publicar` no painel, com legenda pra copiar e botão de "marcar
+como postado". Esses valores ficam em `data/settings.json` (editáveis pelo
+painel), junto com a voz do TTS e o nome do canal.
+
+> Automatizar o upload controlando o app do TikTok (GUI/robô de cliques)
+> **não** é uma opção aqui: é o que os Termos proíbem explicitamente
+> (postagem automatizada fora da API) e o risco é banimento da conta.
 
 ## Painel web (webapp/)
 
@@ -119,7 +208,7 @@ roteiro/vídeo, e o principal — **upload de vídeo de fundo e música
 customizados por notícia, escolhendo o trecho exato (início + duração)**.
 
 ```bash
-uv run python -m webapp.app
+scripts/webapp.sh          # ou: uv run python -m webapp.app
 # acesse http://localhost:5000 no navegador
 ```
 
@@ -149,7 +238,7 @@ internet (é só para `localhost` da própria máquina).
 /collector       -> coleta de RSS/APIs de notícias
 /dedupe          -> deduplicação e filtro de relevância
 /script_gen      -> geração de roteiro via Claude Code CLI (PT-BR)
-/video_gen       -> TTS (ElevenLabs) + legendas (whisper) + render (Remotion)
+/video_gen       -> TTS (ElevenLabs c/ timestamps) + legendas + render (Remotion)
   /remotion      -> projeto Node.js/React com o template do vídeo (9:16)
 /publisher       -> integração com TikTok Content Posting API
 /pipeline        -> orquestrador end-to-end (todas as etapas)
@@ -175,9 +264,13 @@ JSON. Usa a assinatura Claude Pro/Max do usuário via CLI (subprocess),
 evitando custo de API por token.
 
 **video_gen**: para cada item com roteiro pronto:
-1. Gera narração em áudio via ElevenLabs TTS
-2. Transcreve o áudio com `faster-whisper` (local, offline) para obter
-   timestamps por palavra
+1. Gera narração em áudio via ElevenLabs TTS (`convert_with_timestamps`),
+   que já devolve o alinhamento por caractere — daí saem os timestamps por
+   palavra das legendas, com o texto exato do roteiro (sem transcrição).
+   Termos em inglês são falados com respelling fonético
+   (`pronunciations.yaml` global + campo "Pronúncias" gerado por notícia),
+   mas a legenda mostra o termo original.
+2. (não há mais etapa de transcrição)
 3. Se o roteiro identificou um `game_name`, busca um clipe de fundo nesta
    ordem: (a) clipe manual em `video_gen/manual_clips/<slug>.*` fornecido
    por você, (b) clipe já em cache de uma execução anterior, (c) download
@@ -251,7 +344,7 @@ diretório temporário) — nenhuma chamada de rede/custo é feita durante
 - **Roteiro:** Claude Code CLI (`claude -p`), assinatura Pro/Max
 - **TTS:** ElevenLabs (`eleven_multilingual_v2`), voice_settings tunados
   para expressividade (stability baixa, style alto, speed ~1.08)
-- **Legendas:** faster-whisper (local, CPU, modelo `base`)
+- **Legendas:** alinhamento por caractere do próprio ElevenLabs (`convert_with_timestamps`) — texto exato do roteiro, sem transcrição
 - **Vídeo:** Remotion (React/TypeScript, Node.js), 1080x1920, render via CLI
 - **Publicação:** TikTok Content Posting API v2 (`open.tiktokapis.com`)
 - **Orquestração:** scripts Python + cron do sistema

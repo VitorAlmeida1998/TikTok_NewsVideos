@@ -1,9 +1,7 @@
 """Testes do gerador de roteiro (mock do runner do claude CLI, sem custo/chamadas reais)."""
-import json
-
 import pytest
 
-from script_gen.generator import ScriptGenError, _parse_script_json, generate_script
+from script_gen.generator import ScriptGenError, _parse_script_response, generate_script
 
 
 def _make_runner(response_text: str):
@@ -13,14 +11,29 @@ def _make_runner(response_text: str):
     return runner
 
 
+def _format_response(
+    hook="h", body="b", cta="c", description="d", game_name="", pronunciations=""
+) -> str:
+    return (
+        f"HOOK: {hook}\n"
+        f"BODY: {body}\n"
+        f"CTA: {cta}\n"
+        f"DESCRIPTION: {description}\n"
+        f"GAME_NAME: {game_name}\n"
+        f"PRONUNCIATIONS: {pronunciations}"
+    )
+
+
 def test_generate_script_returns_parsed_dict():
-    payload = {
+    expected = {
         "hook": "Vaza data de lançamento antes da hora!",
         "body": "Segundo informações do site, o jogo foi confirmado para o próximo ano.",
         "cta": "Comenta aqui se você tava esperando isso!",
+        "description": "Some Game finalmente tem data! #fyp #gaming #somegame",
         "game_name": "Some Game",
+        "pronunciations": "Some Game=Sâm Gueim",
     }
-    runner = _make_runner(json.dumps(payload))
+    runner = _make_runner(_format_response(**expected))
 
     result = generate_script(
         title="Big Game Gets Release Date",
@@ -29,25 +42,44 @@ def test_generate_script_returns_parsed_dict():
         runner=runner,
     )
 
-    assert result == payload
+    assert result == expected
+
+
+def test_generate_script_tolerates_quotes_and_apostrophes_in_fields():
+    """Regressão: notícias com aspas no título (ex: falas citadas) não podem
+    quebrar o parser — motivo pelo qual o formato não é mais JSON."""
+    expected = {
+        "hook": 'Ele disse "isso muda tudo" e o jogo ainda nem saiu!',
+        "body": "Marvel's Wolverine teve o final vazado, segundo o autor do post \"eu vazei\".",
+        "cta": 'Você diria "não acredito" ou já esperava?',
+        "description": "Marvel's Wolverine vaza de novo! #fyp #gaming",
+        "game_name": "Marvel's Wolverine",
+        "pronunciations": "Marvel's Wolverine=Márvels Uólverin",
+    }
+    runner = _make_runner(_format_response(**expected))
+
+    result = generate_script(title="T", summary="S", source="src", runner=runner)
+    assert result == expected
 
 
 def test_generate_script_strips_markdown_fences():
-    payload = {"hook": "h", "body": "b", "cta": "c", "game_name": ""}
-    fenced = "```json\n" + json.dumps(payload) + "\n```"
+    expected = {
+        "hook": "h", "body": "b", "cta": "c", "description": "d", "game_name": "", "pronunciations": ""
+    }
+    fenced = "```\n" + _format_response(**expected) + "\n```"
     runner = _make_runner(fenced)
 
     result = generate_script(title="T", summary="S", source="src", runner=runner)
-    assert result == payload
+    assert result == expected
 
 
-def test_generate_script_extracts_json_with_surrounding_text():
-    payload = {"hook": "h", "body": "b", "cta": "c", "game_name": ""}
-    noisy = f"Aqui está o roteiro:\n{json.dumps(payload)}\nEspero que ajude!"
-    runner = _make_runner(noisy)
+def test_generate_script_defaults_optional_fields_when_absent():
+    runner = _make_runner("HOOK: h\nBODY: b\nCTA: c")
 
     result = generate_script(title="T", summary="S", source="src", runner=runner)
-    assert result == payload
+    assert result == {
+        "hook": "h", "body": "b", "cta": "c", "description": "", "game_name": "", "pronunciations": ""
+    }
 
 
 def test_generate_script_passes_prompt_with_title_and_summary():
@@ -55,7 +87,7 @@ def test_generate_script_passes_prompt_with_title_and_summary():
 
     def runner(prompt: str) -> str:
         captured["prompt"] = prompt
-        return json.dumps({"hook": "h", "body": "b", "cta": "c"})
+        return _format_response()
 
     generate_script(title="Meu Título", summary="Meu Resumo", source="ign", runner=runner)
 
@@ -64,19 +96,19 @@ def test_generate_script_passes_prompt_with_title_and_summary():
     assert "ign" in captured["prompt"]
 
 
-def test_parse_script_json_raises_on_missing_field():
+def test_parse_script_response_raises_on_missing_field():
     with pytest.raises(ValueError):
-        _parse_script_json(json.dumps({"hook": "h", "body": "b"}))
+        _parse_script_response("HOOK: h\nBODY: b")
 
 
-def test_parse_script_json_raises_on_empty_field():
+def test_parse_script_response_raises_on_empty_field():
     with pytest.raises(ValueError):
-        _parse_script_json(json.dumps({"hook": "", "body": "b", "cta": "c"}))
+        _parse_script_response("HOOK: \nBODY: b\nCTA: c")
 
 
-def test_parse_script_json_raises_on_invalid_json():
-    with pytest.raises(json.JSONDecodeError):
-        _parse_script_json("not json at all, no braces")
+def test_parse_script_response_raises_on_unrecognized_format():
+    with pytest.raises(ValueError):
+        _parse_script_response("isso aqui não tem nenhum campo reconhecível")
 
 
 def test_script_gen_error_is_raised_on_cli_failure():

@@ -74,7 +74,8 @@ def run(
                 if mode == "inbox":
                     result = post_video_to_inbox(row["video_path"])
                 elif mode == "direct":
-                    title = f"{row['script_hook']} {row['script_cta']}"[:150]
+                    description = row["script_description"] if "script_description" in row.keys() else ""
+                    title = (description or f"{row['script_hook']} {row['script_cta']}")[:150]
                     result = post_video_direct(row["video_path"], title=title)
                 else:
                     raise ValueError(f"Modo inválido: {mode}")

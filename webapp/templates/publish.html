@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Publicar — TikTok GameNews{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Fila de publicação</h1>
+    <p class="sub">{{ queue|length }} vídeo{{ 's' if queue|length != 1 }} pronto{{ 's' if queue|length != 1 }} pra postar · na ordem em que devem ir pro ar</p>
+  </div>
+  <form method="post" action="{{ url_for('recalc_schedule') }}">
+    <button type="submit" class="secondary">{{ icon('refresh-cw') }} Recalcular agenda</button>
+  </form>
+</div>
+
+<div class="card" style="background:var(--bg-elevated); border-style:dashed;">
+  <p class="hint icon-inline" style="font-size:13px; line-height:1.6;">
+    {{ icon('info', size=15) }}
+    <span>
+      O upload continua <strong>manual</strong> (a Content Posting API do TikTok ainda não está
+      aprovada pra esta conta, e automatizar o app por cliques é proibido pelos Termos —
+      risco de shadowban/banimento). O que dá pra automatizar é <strong>o quê</strong> e
+      <strong>quando</strong>: baixe o vídeo, copie a legenda, poste no horário sugerido e
+      marque como postado.
+    </span>
+  </p>
+</div>
+
+<div class="section-title">{{ icon('calendar', size=14) }} Horários de pico</div>
+<div class="card">
+  <form method="post" action="{{ url_for('save_publish_settings') }}">
+    <div class="row">
+      <div class="form-group">
+        <label>Horários de pico (BR, separados por vírgula)</label>
+        <input type="text" name="peak_slots" value="{{ peak_slots_text }}" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Posts por dia</label>
+        <input type="number" name="posts_per_day" value="{{ settings.posts_per_day }}" min="1" max="10" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Intervalo mínimo (min)</label>
+        <input type="number" name="min_gap_minutes" value="{{ settings.min_gap_minutes }}" min="15" max="720" step="15" style="width:100%;">
+      </div>
+    </div>
+    <button type="submit" class="secondary">{{ icon('save') }} Salvar horários</button>
+    <p class="hint" style="margin-top:8px;">
+      Notícia com pontuação ≥ {{ settings.hot_score|round(0)|int }} e menos de {{ settings.hot_max_age_hours|round(0)|int }}h de idade
+      é marcada como <strong>postar agora</strong> — em notícia de games, chegar primeiro vale mais que esperar o horário nobre.
+      Vídeo com mais de {{ settings.stale_hours|round(0)|int }}h não ganha horário: entra como <strong>passou o ponto</strong>.
+      O teto de geração acompanha o de posts por dia (protege a cota de TTS).
+    </p>
+  </form>
+</div>
+
+<div class="section-title">{{ icon('gamepad-2', size=14) }} Marca do canal</div>
+<div class="card">
+  <form method="post" action="{{ url_for('save_brand_settings') }}">
+    <input type="hidden" name="next" value="{{ url_for('publish_queue_page') }}">
+    <div class="row">
+      <div class="form-group">
+        <label>Nome do canal (marca d'água e capa)</label>
+        <input type="text" name="channel_handle" value="{{ settings.channel_handle }}" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Iniciais (avatar do "segue o perfil")</label>
+        <input type="text" name="channel_initials" value="{{ settings.channel_initials }}" maxlength="3" style="width:100%;">
+      </div>
+    </div>
+    <button type="submit" class="secondary">{{ icon('save') }} Salvar marca</button>
+    <p class="hint" style="margin-top:8px;">
+      Vale no <strong>próximo vídeo gerado</strong> (os já renderizados mantêm o nome antigo).
+      Vale trocar: "TikTok GameNews" usa a marca do TikTok — não é registrável e não funciona
+      em Shorts/Reels.
+    </p>
+  </form>
+</div>
+
+{% if queue %}
+  <div class="section-title">{{ icon('send', size=14) }} Próximos a postar</div>
+  {% for item in queue %}
+    <div class="card publish-card">
+      <div class="phone-frame small">
+        {% if item.has_cover %}
+          <img src="{{ url_for('media_cover', item_id=item.id) }}" alt="Capa do vídeo #{{ item.id }}">
+        {% else %}
+          <video controls playsinline preload="metadata" src="{{ url_for('media_video', item_id=item.id) }}"></video>
+        {% endif %}
+      </div>
+
+      <div class="publish-main">
+        <div class="publish-slot {{ 'now' if item.post_now }}{{ 'stale' if item.stale or item.duplicate }}">
+          {% if item.post_now %}
+            {{ icon('zap', size=16) }} POSTAR AGORA
+          {% elif item.stale %}
+            {{ icon('triangle-alert', size=16) }} PASSOU O PONTO
+          {% elif item.duplicate %}
+            {{ icon('info', size=16) }} HISTÓRIA REPETIDA
+          {% else %}
+            {{ icon('clock', size=16) }} {{ item.slot_label or 'sem horário' }}
+          {% endif %}
+        </div>
+        <p class="hint" style="margin:0 0 10px 0;">{{ item.slot_reason }}</p>
+
+        <a class="item-title" href="{{ url_for('item_detail', item_id=item.id) }}">{{ item.title }}</a>
+        <div class="item-meta" style="margin:6px 0 12px 0;">
+          <span class="source-tag">{{ item.source }}</span>
+          {% if item.game_name %}<span class="icon-inline">{{ icon('gamepad-2', size=13) }} {{ item.game_name }}</span>{% endif %}
+          <span>#{{ item.id }}</span>
+          {% if item.effective_score %}<span class="score-tag" title="Pontuação x frescor">{{ icon('flame', size=12) }} {{ '%.0f'|format(item.effective_score) }}</span>{% endif %}
+          <span>{{ '%.0f'|format(item.age_hours) }}h de idade</span>
+        </div>
+
+        <label>Legenda pra colar no TikTok</label>
+        <textarea readonly rows="3" id="caption-{{ item.id }}" class="caption-box">{{ item.script_description or '(sem legenda — gere/edite o roteiro)' }}</textarea>
+
+        <div class="row" style="margin-top:12px; gap:8px;">
+          <button type="button" class="secondary sm" style="flex:0;" onclick="copyCaption({{ item.id }})">{{ icon('copy', size=14) }} Copiar legenda</button>
+          <a class="btn secondary sm" style="flex:0;" href="{{ url_for('media_video', item_id=item.id) }}?download=1">{{ icon('download', size=14) }} Baixar vídeo</a>
+          {% if item.has_cover %}
+            <a class="btn ghost sm" style="flex:0;" href="{{ url_for('media_cover', item_id=item.id) }}?download=1">{{ icon('image', size=14) }} Baixar capa</a>
+          {% endif %}
+          <form method="post" action="{{ url_for('toggle_posted', item_id=item.id) }}" style="flex:0;">
+            <input type="hidden" name="posted" value="1">
+            <button type="submit" class="sm">{{ icon('check', size=14) }} Marcar como postado</button>
+          </form>
+          <span id="caption-feedback-{{ item.id }}" class="hint" style="align-self:center;"></span>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <div class="icon">{{ icon('send', size=32) }}</div>
+    <p>Nenhum vídeo esperando publicação. O monitor gera novos conforme as notícias chegam.</p>
+  </div>
+{% endif %}
+
+{% if posted %}
+  <div class="section-title">{{ icon('check', size=14) }} Já postados (últimos {{ posted|length }})</div>
+  <div class="card flush">
+    {% for item in posted %}
+      <div class="news-item">
+        <div class="main">
+          <a class="item-title" href="{{ url_for('item_detail', item_id=item.id) }}">{{ item.title }}</a>
+          <div class="item-meta">
+            <span class="source-tag">{{ item.source }}</span>
+            <span>postado em {{ item.posted_at[:16].replace('T', ' ') }}</span>
+          </div>
+        </div>
+        <div class="side">
+          <form method="post" action="{{ url_for('toggle_posted', item_id=item.id) }}">
+            <input type="hidden" name="posted" value="0">
+            <button type="submit" class="ghost sm">{{ icon('x', size=14) }} Desmarcar</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<script>
+async function copyCaption(itemId) {
+  const field = document.getElementById('caption-' + itemId);
+  const feedback = document.getElementById('caption-feedback-' + itemId);
+  try {
+    await navigator.clipboard.writeText(field.value);
+    feedback.textContent = 'Copiado!';
+  } catch (err) {
+    field.select();
+    feedback.textContent = 'Selecionado — Ctrl+C pra copiar.';
+  }
+  setTimeout(() => { feedback.textContent = ''; }, 3000);
+}
+</script>
+
+{% endblock %}

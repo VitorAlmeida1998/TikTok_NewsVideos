@@ -16,7 +16,7 @@ def make_relevant_item(conn, title: str, url: str):
     return row_id
 
 
-def _fake_script(title, summary, source, model="m", client=None):
+def _fake_script(title, summary, source, model="m", client=None, recent_hooks=None):
     return {"hook": f"hook-{title}", "body": f"body-{title}", "cta": "cta"}
 
 
@@ -53,7 +53,7 @@ def test_run_continues_when_one_item_fails(tmp_db_path):
         make_relevant_item(conn, "Good Title", "https://example.com/good")
         make_relevant_item(conn, "Bad Title", "https://example.com/bad")
 
-    def side_effect(title, summary, source, model="m", client=None):
+    def side_effect(title, summary, source, model="m", client=None, recent_hooks=None):
         if title == "Bad Title":
             raise RuntimeError("API error")
         return _fake_script(title, summary, source)

@@ -34,8 +34,45 @@ BR veja a notícia em outro lugar.
   variação emocional), `style=0.65` (amplifica expressividade natural da
   voz), `speed=1.08` (ritmo mais ágil). Voz configurável via
   `ELEVENLABS_VOICE_ID` no `.env` sem precisar mexer em código.
-- **Legendas (video_gen)**: faster-whisper local (CPU, modelo `base`),
-  timestamps por palavra
+- **Legendas (video_gen)**: timestamps por palavra vêm do alinhamento por
+  caractere do próprio ElevenLabs (`convert_with_timestamps`), mapeado de
+  volta pras palavras originais do roteiro (`video_gen/alignment.py`). O
+  whisper foi removido: legendas agora têm o texto exato do roteiro.
+- **Pronúncia de termos em inglês (video_gen/pronunciation.py)**: respelling
+  fonético só no texto enviado ao TTS ("Wolverine" -> "Uólverin"); fontes:
+  `pronunciations.yaml` (global, vence) + campo PRONUNCIATIONS gerado pelo
+  script_gen por notícia (`script_pronunciations`).
+- **Capa (thumbnail)**: `video_gen/cover.py` + composição `NewsCover`
+  (renderizada com `remotion still --frame=N`, N = 25% do clipe de fundo).
+  `generate_video_for_item` devolve `cover_path` quando dá certo; falha de
+  capa nunca invalida o vídeo.
+- **Travas de custo**: `video_gen/quota.py` (lê a assinatura do ElevenLabs)
+  + `max_videos_per_day`/`tts_reserve_chars` em settings, aplicados em
+  `video_gen/run.py`. Motivo: o monitor roda a cada 2 min e a fila é sempre
+  maior que a cota (~82 narrações/mês no plano Starter).
+- **Configurações de runtime**: `shared/settings.py` -> `data/settings.json`
+  (voz do TTS, nome/iniciais do canal, horários de pico, posts por dia,
+  limiar de "notícia quente"). O painel edita; o TTS resolve a voz por
+  chamada (troca vale no próximo vídeo, sem reiniciar).
+- **Fila de publicação**: `publisher/schedule.py` (`build_schedule`) dá
+  horário de pico BR a cada vídeo pronto, ou marca "postar agora" pra
+  notícia quente+fresca. `pipeline/watch.py` chama isso ao fim de cada
+  ciclo; o painel mostra em `/publicar`. Upload continua manual — NUNCA
+  automatizar via GUI do app do TikTok (proibido pelos Termos; risco de ban).
+- **Uma história, um vídeo**: `dedupe/story_group.py` agrupa por
+  similaridade de título (Jaccard, janela de 36h) e `shared/db.py` filtra a
+  fila com `_NO_DUPLICATE_STORY`.
+- **Frescor**: `EFFECTIVE_SCORE_SQL` (db) e `freshness_multiplier`
+  (keyword_filter) — a fila ordena por relevância x frescor, não pelo score
+  congelado.
+- **Modo autônomo (cron)**: `--require-media` (só renderiza com fundo +
+  música; senão marca `video_skip_reason` = "aguardando mídia" no painel,
+  sem gastar TTS), `--max-age-hours 48`, fila ordenada por
+  `relevance_score` (dedupe/keyword_filter.relevance_score). Quem roda de
+  verdade é o monitor contínuo `pipeline/watch.py` (polling dos feeds a
+  cada 2 min, subido por `scripts/watcher.sh`; cron `*/5` é só watchdog via
+  flock). Clipes/OST do YouTube são cortados a partir de 45% da duração
+  (`MIDDLE_START_FRACTION`), nunca do início.
 - **Vídeo (video_gen)**: Remotion (React/TS, projeto Node.js em
   `video_gen/remotion/`), formato 1080x1920, renderizado via
   `npx remotion render` chamado por subprocess. Assets de áudio/vídeo de
@@ -113,8 +150,8 @@ do ambiente (que teria prioridade sobre o login OAuth se presente).
   arquivo MP3. Requer `ELEVENLABS_API_KEY` com permissão `text_to_speech`
   habilitada na dashboard (erro 401 "missing_permissions" se não habilitada
   — não é erro de chave inválida).
-- `video_gen/captions.py`: `faster-whisper` (modelo `base`, CPU, int8),
-  `word_timestamps=True`, retorna lista de `WordTiming(word, start, end)`.
+- `video_gen/alignment.py`: `WordTiming(word, start, end)` a partir do
+  alinhamento por caractere do ElevenLabs + spans de `pronunciation.py`.
 - `video_gen/assembler.py`: monta a narração (hook+body+cta), gera áudio,
   transcreve, copia o áudio pra `video_gen/remotion/public/audio/` (Remotion
   só serve assets de dentro de `public/` via `staticFile()`), monta o spec

@@ -9,7 +9,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">🎮</span>
+      <span class="logo">{{ icon('gamepad-2', size=22) }}</span>
       <div class="brand-text">
         <span class="title">TikTok GameNews</span>
         <span class="subtitle">Painel de produção</span>
@@ -17,6 +17,8 @@
     </div>
     <nav>
       <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">Notícias</a>
+      <a href="{{ url_for('publish_queue_page') }}" class="{{ 'active' if request.endpoint == 'publish_queue_page' }}">Publicar</a>
+      <a href="{{ url_for('voices_page') }}" class="{{ 'active' if request.endpoint == 'voices_page' }}">Vozes</a>
       <a href="{{ url_for('jobs_page') }}" class="{{ 'active' if request.endpoint == 'jobs_page' }}">Tarefas</a>
     </nav>
   </header>

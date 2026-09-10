@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   AbsoluteFill,
   Audio,
@@ -7,11 +7,19 @@ import {
   useCurrentFrame,
   useVideoConfig,
   interpolate,
+  spring,
   Easing,
   CalculateMetadataFunction,
   Loop,
 } from "remotion";
+import { loadFont } from "@remotion/google-fonts/Montserrat";
 import { z } from "zod";
+
+const { fontFamily: montserrat } = loadFont("normal", {
+  weights: ["700", "800", "900"],
+  subsets: ["latin", "latin-ext"],
+});
+const FONT = `${montserrat}, "Segoe UI", Roboto, Arial, sans-serif`;
 
 export const wordSchema = z.object({
   word: z.string(),
@@ -29,13 +37,22 @@ export const newsShortSchema = z.object({
   audioPath: z.string(),
   backgroundVideoPath: z.string().default(""),
   musicPath: z.string().default(""),
+  badge: z.string().default(""),
+  // marca do canal: vem do spec (data/settings.json) pra trocar o nome sem
+  // mexer em código; os defaults abaixo valem pra specs antigos
+  channelHandle: z.string().default("TikTok GameNews"),
+  channelInitials: z.string().default("GN"),
   words: z.array(wordSchema),
 });
 
 export type NewsShortProps = z.infer<typeof newsShortSchema>;
+type Word = NewsShortProps["words"][number];
 
 const FPS = 30;
 const TAIL_SECONDS = 1.5; // segundos extras após a última palavra antes do vídeo acabar
+
+const ACCENT = "#ffcc00";
+const INK = "#0f0c29";
 
 // Ajusta a duração total do vídeo dinamicamente com base no fim da última
 // palavra transcrita (áudio real), em vez de um valor fixo arbitrário.
@@ -50,17 +67,40 @@ export const calculateNewsShortMetadata: CalculateMetadataFunction<
   };
 };
 
-const Background: React.FC = () => (
-  <AbsoluteFill
-    style={{
-      background: "linear-gradient(160deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
-    }}
-  />
-);
+// ---------------------------------------------------------------- fundo
 
-// Fundo de gameplay/trailer em loop, com overlay escuro por cima para
-// manter o texto e as legendas legíveis (contraste consistente,
-// independente do brilho do clipe original).
+// Fundo gradiente animado (quando não há clipe de gameplay): dois "blobs"
+// de luz derivam lentamente, pra tela nunca parecer estática.
+const GradientBackground: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+  const x1 = 30 + Math.sin(t * 0.25) * 18;
+  const y1 = 25 + Math.cos(t * 0.2) * 14;
+  const x2 = 72 + Math.cos(t * 0.18) * 16;
+  const y2 = 75 + Math.sin(t * 0.22) * 12;
+
+  return (
+    <AbsoluteFill
+      style={{
+        background: "linear-gradient(160deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+      }}
+    >
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(circle at ${x1}% ${y1}%, rgba(255,204,0,0.18) 0%, rgba(255,204,0,0) 38%)`,
+        }}
+      />
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(circle at ${x2}% ${y2}%, rgba(120,90,255,0.35) 0%, rgba(120,90,255,0) 42%)`,
+        }}
+      />
+    </AbsoluteFill>
+  );
+};
+
+// Fundo de gameplay/trailer em loop com zoom lento (Ken Burns).
 //
 // Usa OffthreadVideo em vez de Video: o componente <Video> depende do
 // elemento <video> do navegador para extrair cada frame durante o
@@ -77,11 +117,15 @@ const Background: React.FC = () => (
 const GAMEPLAY_CLIP_DURATION_SECONDS = 60;
 
 const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
+  const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const clipFrames = Math.round(GAMEPLAY_CLIP_DURATION_SECONDS * fps);
+  const scale = interpolate(frame, [0, durationInFrames], [1, 1.08], {
+    extrapolateRight: "clamp",
+  });
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ transform: `scale(${scale})` }}>
       <Loop durationInFrames={clipFrames} times={Math.ceil(durationInFrames / clipFrames)}>
         <OffthreadVideo
           src={src}
@@ -89,84 +133,193 @@ const GameplayBackground: React.FC<{ src: string }> = ({ src }) => {
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       </Loop>
-      <AbsoluteFill style={{ background: "rgba(10, 8, 30, 0.55)" }} />
     </AbsoluteFill>
   );
 };
 
-const HookOverlay: React.FC<{ hook: string; source: string }> = ({
-  hook,
-  source,
-}) => {
+// Escurece topo (atrás do hook) e base (atrás das legendas), deixando o
+// meio do clipe visível; vinheta suave nas bordas.
+const ReadabilityOverlay: React.FC = () => (
+  <>
+    <AbsoluteFill style={{ background: "rgba(10, 8, 30, 0.18)" }} />
+    <AbsoluteFill
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(5,4,20,0.7) 0%, rgba(5,4,20,0.3) 22%, rgba(5,4,20,0) 36%, rgba(5,4,20,0) 56%, rgba(5,4,20,0.45) 74%, rgba(5,4,20,0.88) 100%)",
+      }}
+    />
+    <AbsoluteFill
+      style={{
+        background:
+          "radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 100%)",
+      }}
+    />
+  </>
+);
+
+// ---------------------------------------------------------------- hook
+
+const HOOK_HOLD_SECONDS = 1.0;
+const HOOK_EXIT_FRAMES = 12;
+
+const HookOverlay: React.FC<{
+  hook: string;
+  source: string;
+  hideAt: number; // segundos
+}> = ({ hook, source, hideAt }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = interpolate(frame, [0, fps * 0.5], [0, 1], {
+  const hookWords = hook.split(/\s+/).filter(Boolean);
+  const exitStart = Math.round(hideAt * fps);
+
+  if (frame >= exitStart + HOOK_EXIT_FRAMES) return null;
+
+  const exit = interpolate(frame, [exitStart, exitStart + HOOK_EXIT_FRAMES], [0, 1], {
+    extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
+    easing: Easing.in(Easing.cubic),
   });
+
+  const pillEnter = spring({ frame, fps, config: { damping: 14, stiffness: 120 } });
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "flex-start",
         alignItems: "center",
-        paddingTop: 140,
-        opacity: enter,
-        transform: `translateY(${(1 - enter) * -30}px)`,
+        paddingTop: 168,
+        opacity: 1 - exit,
+        transform: `translateY(${-48 * exit}px)`,
       }}
     >
       <div
         style={{
-          fontSize: 28,
-          color: "#ffcc00",
-          fontFamily: "sans-serif",
-          fontWeight: 700,
-          letterSpacing: 2,
-          textTransform: "uppercase",
-          marginBottom: 20,
+          fontFamily: FONT,
+          fontSize: 66,
+          lineHeight: 1.12,
+          color: "white",
+          fontWeight: 900,
+          textAlign: "center",
+          maxWidth: 940,
+          textShadow: "0 6px 28px rgba(0,0,0,0.75)",
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          columnGap: 18,
+          rowGap: 4,
         }}
       >
-        {source}
+        {hookWords.map((w, i) => {
+          const s = spring({
+            frame: frame - i * 3,
+            fps,
+            config: { damping: 12, stiffness: 160, mass: 0.6 },
+          });
+          return (
+            <span
+              key={`${w}-${i}`}
+              style={{
+                display: "inline-block",
+                opacity: s,
+                transform: `translateY(${(1 - s) * 34}px) scale(${0.8 + s * 0.2})`,
+              }}
+            >
+              {w}
+            </span>
+          );
+        })}
       </div>
       <div
         style={{
-          fontSize: 64,
-          color: "white",
-          fontFamily: "sans-serif",
-          fontWeight: 900,
-          textAlign: "center",
-          width: "85%",
-          textShadow: "0 4px 20px rgba(0,0,0,0.6)",
-          lineHeight: 1.15,
+          marginTop: 24,
+          fontFamily: FONT,
+          fontSize: 22,
+          fontWeight: 800,
+          letterSpacing: 2.5,
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.9)",
+          background: "rgba(255,255,255,0.12)",
+          border: "1px solid rgba(255,255,255,0.22)",
+          padding: "8px 20px",
+          borderRadius: 999,
+          opacity: pillEnter,
+          transform: `scale(${0.9 + pillEnter * 0.1})`,
         }}
       >
-        {hook}
+        via {source}
       </div>
     </AbsoluteFill>
   );
 };
 
-// Legenda animada: mostra a palavra atual em destaque, estilo "karaokê",
-// com base nos timestamps do faster-whisper.
-const WordCaptions: React.FC<{ words: NewsShortProps["words"] }> = ({
-  words,
-}) => {
+// ---------------------------------------------------------------- legendas
+
+type Chunk = { words: Word[]; firstIndex: number; start: number; end: number };
+
+const CHUNK_MAX_WORDS = 4;
+const CHUNK_MAX_SECONDS = 1.8;
+const SENTENCE_END = /[.!?…]["»)]?$/;
+const CHUNK_LINGER_SECONDS = 0.6;
+
+const buildChunks = (words: Word[]): Chunk[] => {
+  const chunks: Chunk[] = [];
+  let current: Word[] = [];
+  let firstIndex = 0;
+
+  const flush = () => {
+    if (current.length === 0) return;
+    chunks.push({
+      words: current,
+      firstIndex,
+      start: current[0].start,
+      end: current[current.length - 1].end,
+    });
+    current = [];
+  };
+
+  words.forEach((w, i) => {
+    if (current.length === 0) firstIndex = i;
+    current.push(w);
+    const clean = w.word.trim();
+    const sentenceEnd = SENTENCE_END.test(clean);
+    const comma = /,$/.test(clean) && current.length >= 2;
+    const tooLong = w.end - current[0].start >= CHUNK_MAX_SECONDS;
+    if (sentenceEnd || comma || tooLong || current.length >= CHUNK_MAX_WORDS) {
+      flush();
+    }
+  });
+  flush();
+  return chunks;
+};
+
+const WordCaptions: React.FC<{ words: Word[] }> = ({ words }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
+  const chunks = useMemo(() => buildChunks(words), [words]);
 
-  const activeIndex = words.findIndex((w) => t >= w.start && t <= w.end);
-  const windowSize = 4;
-  const centerIndex = activeIndex === -1 ? 0 : activeIndex;
-  const start = Math.max(0, centerIndex - 1);
-  const visible = words.slice(start, start + windowSize);
+  let chunk = chunks.find((c) => t >= c.start && t <= c.end);
+  if (!chunk) {
+    const previous = [...chunks].reverse().find((c) => c.end < t);
+    if (previous && t - previous.end <= CHUNK_LINGER_SECONDS) chunk = previous;
+  }
+  if (!chunk) return null;
+
+  const chunkFrame = frame - Math.round(chunk.start * fps);
+  const enter = spring({
+    frame: chunkFrame,
+    fps,
+    config: { damping: 13, stiffness: 190, mass: 0.7 },
+  });
+
+  const activeIndex = chunk.words.findIndex((w) => t >= w.start && t <= w.end);
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "flex-end",
         alignItems: "center",
-        paddingBottom: 260,
+        paddingBottom: 300,
       }}
     >
       <div
@@ -174,26 +327,46 @@ const WordCaptions: React.FC<{ words: NewsShortProps["words"] }> = ({
           display: "flex",
           flexWrap: "wrap",
           justifyContent: "center",
-          gap: 12,
-          width: "88%",
+          alignItems: "center",
+          columnGap: 28,
+          rowGap: 10,
+          maxWidth: 940,
+          padding: "20px 36px",
+          borderRadius: 26,
+          background: "rgba(5, 4, 20, 0.6)",
+          opacity: Math.min(1, enter * 2.5),
+          transform: `translateY(${(1 - enter) * 24}px) scale(${0.92 + enter * 0.08})`,
         }}
       >
-        {visible.map((w, i) => {
-          const globalIndex = start + i;
-          const isActive = globalIndex === activeIndex;
+        {chunk.words.map((w, i) => {
+          const isActive = i === activeIndex;
+          const wordFrame = frame - Math.round(w.start * fps);
+          const pop = isActive
+            ? spring({
+                frame: wordFrame,
+                fps,
+                config: { damping: 9, stiffness: 260, mass: 0.5 },
+              })
+            : 0;
+          const scale = 1 + pop * 0.1;
           return (
             <span
-              key={`${w.word}-${globalIndex}`}
+              key={`${w.word}-${chunk.firstIndex + i}`}
               style={{
-                fontSize: 52,
-                fontFamily: "sans-serif",
-                fontWeight: 800,
-                color: isActive ? "#ffcc00" : "white",
-                textShadow: "0 3px 12px rgba(0,0,0,0.7)",
-                transform: isActive ? "scale(1.12)" : "scale(1)",
-                transformOrigin: "center",
                 display: "inline-block",
                 padding: "0 4px",
+                fontFamily: FONT,
+                fontSize: 58,
+                fontWeight: 900,
+                lineHeight: 1.15,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                color: isActive ? ACCENT : "white",
+                textShadow: isActive
+                  ? "0 0 22px rgba(255,204,0,0.55), 0 4px 14px rgba(0,0,0,0.8)"
+                  : "0 4px 14px rgba(0,0,0,0.8)",
+                transform: `scale(${scale})`,
+                transformOrigin: "center",
               }}
             >
               {w.word}
@@ -205,38 +378,278 @@ const WordCaptions: React.FC<{ words: NewsShortProps["words"] }> = ({
   );
 };
 
+// ---------------------------------------------------------------- selo / CTA / marca
+
+// Nome/handle do canal: vem das props (data/settings.json via spec), sempre
+// visível num canto discreto — reconhecimento de marca (quem rola o feed passa
+// a reconhecer o canal) e proteção contra reupload sem crédito.
+
+// Card "segue o perfil" na lateral direita (faixa livre entre o hook/CTA no
+// topo e as legendas embaixo). Aparece duas vezes: um lembrete curto no meio
+// do vídeo e de novo junto com o CTA final, até o fim.
+const SHOW_FOLLOW_NUDGE = true;
+const NUDGE_MID_AT = 0.35; // fração da duração em que o lembrete do meio entra
+const NUDGE_MID_SECONDS = 2.2;
+const NUDGE_MIN_VIDEO_SECONDS = 12; // vídeos mais curtos só mostram junto do CTA
+const NUDGE_EXIT_FRAMES = 10;
+const NUDGE_RED = "#ff2d55";
+
+const FollowNudge: React.FC<{ ctaShowAfter: number; initials: string }> = ({
+  ctaShowAfter,
+  initials,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames } = useVideoConfig();
+  const t = frame / fps;
+  const duration = durationInFrames / fps;
+
+  const midStart = duration * NUDGE_MID_AT;
+  const midEnd = midStart + NUDGE_MID_SECONDS;
+  const midAllowed = duration >= NUDGE_MIN_VIDEO_SECONDS && midEnd < ctaShowAfter - 0.5;
+
+  let windowStart: number | null = null;
+  let windowEnd: number | null = null; // null = fica até o fim
+  if (t >= ctaShowAfter) {
+    windowStart = ctaShowAfter;
+  } else if (midAllowed && t >= midStart && t < midEnd) {
+    windowStart = midStart;
+    windowEnd = midEnd;
+  }
+  if (windowStart === null) return null;
+
+  const localFrame = frame - Math.round(windowStart * fps);
+  const enter = spring({
+    frame: localFrame,
+    fps,
+    config: { damping: 11, stiffness: 170, mass: 0.7 },
+  });
+  const exit =
+    windowEnd === null
+      ? 0
+      : interpolate(
+          frame,
+          [Math.round(windowEnd * fps) - NUDGE_EXIT_FRAMES, Math.round(windowEnd * fps)],
+          [0, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.in(Easing.cubic) },
+        );
+  const pulse = windowEnd === null ? 1 + Math.sin((localFrame / fps) * Math.PI * 1.6) * 0.03 : 1;
+
+  // "+" quica a cada ~1.2s
+  const cycle = localFrame % Math.round(1.2 * fps);
+  const bounce = spring({ frame: cycle, fps, config: { damping: 7, stiffness: 220, mass: 0.5 } });
+  const plusY = -14 * (1 - bounce);
+
+  const chevronX = Math.sin((localFrame / fps) * Math.PI * 2.5) * 6;
+
+  return (
+    <AbsoluteFill
+      style={{
+        justifyContent: "flex-start",
+        alignItems: "flex-end",
+        paddingTop: 800,
+        paddingRight: 40,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          width: 300,
+          padding: "14px 16px 14px 14px",
+          borderRadius: 999,
+          background: "rgba(5, 4, 20, 0.72)",
+          backdropFilter: "blur(6px)",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+          opacity: enter * (1 - exit),
+          transform: `translateX(${(1 - enter) * 120 + exit * 80}px) scale(${(0.85 + enter * 0.15) * pulse})`,
+          transformOrigin: "right center",
+        }}
+      >
+        <div style={{ position: "relative", width: 92, height: 92, flexShrink: 0 }}>
+          <div
+            style={{
+              width: 92,
+              height: 92,
+              borderRadius: "50%",
+              background: ACCENT,
+              border: "4px solid white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: FONT,
+              fontWeight: 900,
+              fontSize: 36,
+              color: INK,
+              letterSpacing: 1,
+            }}
+          >
+            {initials}
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: -16,
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: NUDGE_RED,
+              border: "3px solid white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: FONT,
+              fontWeight: 900,
+              fontSize: 28,
+              lineHeight: 1,
+              color: "white",
+              transform: `translate(-50%, ${plusY}px)`,
+            }}
+          >
+            +
+          </div>
+        </div>
+        <div
+          style={{
+            fontFamily: FONT,
+            fontWeight: 800,
+            fontSize: 25,
+            lineHeight: 1.1,
+            color: "white",
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+            flex: 1,
+          }}
+        >
+          Segue
+          <br />
+          o perfil
+        </div>
+        <div
+          style={{
+            fontFamily: FONT,
+            fontWeight: 900,
+            fontSize: 44,
+            lineHeight: 1,
+            color: ACCENT,
+            transform: `translateX(${chevronX}px)`,
+          }}
+        >
+          ›
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+const BrandWatermark: React.FC<{ handle: string }> = ({ handle }) => (
+  <AbsoluteFill
+    style={{
+      justifyContent: "flex-end",
+      alignItems: "flex-start",
+      padding: "0 0 40px 40px",
+    }}
+  >
+    <div
+      style={{
+        fontFamily: FONT,
+        fontSize: 22,
+        color: "rgba(255,255,255,0.6)",
+        fontWeight: 700,
+        letterSpacing: 0.5,
+        textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+      }}
+    >
+      {handle}
+    </div>
+  </AbsoluteFill>
+);
+
+// Selo de canto (ex: "VAZOU", "CONFIRMADO") derivado das keywords de
+// relevância do item — reforça a promessa de "notícia quente, saiu agora" e
+// dá ao canal um padrão visual reconhecível. Some quando o CTA final aparece,
+// pra não competir visualmente com o pill do CTA.
+const BadgeOverlay: React.FC<{ badge: string; hideAfter: number }> = ({
+  badge,
+  hideAfter,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  if (!badge || frame >= hideAfter * fps) return null;
+
+  const enter = spring({ frame, fps, config: { damping: 10, stiffness: 200, mass: 0.6 } });
+
+  return (
+    <AbsoluteFill
+      style={{
+        justifyContent: "flex-start",
+        alignItems: "flex-start",
+        padding: "56px 0 0 48px",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: FONT,
+          fontSize: 28,
+          color: INK,
+          background: ACCENT,
+          padding: "10px 22px",
+          borderRadius: 10,
+          fontWeight: 900,
+          letterSpacing: 1.5,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+          opacity: enter,
+          transform: `rotate(-3deg) scale(${0.6 + enter * 0.4})`,
+          transformOrigin: "left center",
+        }}
+      >
+        {badge}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 const CtaOverlay: React.FC<{ cta: string; showAfter: number }> = ({
   cta,
   showAfter,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const localFrame = frame - showAfter * fps;
+  const localFrame = frame - Math.round(showAfter * fps);
   if (localFrame < 0) return null;
 
-  const enter = interpolate(localFrame, [0, fps * 0.4], [0, 1], {
-    extrapolateRight: "clamp",
+  const enter = spring({
+    frame: localFrame,
+    fps,
+    config: { damping: 12, stiffness: 150, mass: 0.8 },
   });
+  const pulse = 1 + Math.sin((localFrame / fps) * Math.PI * 1.6) * 0.02;
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "flex-start",
         alignItems: "center",
-        paddingTop: 40,
+        paddingTop: 200,
         opacity: enter,
+        transform: `translateY(${(1 - enter) * 70}px)`,
       }}
     >
       <div
         style={{
-          fontSize: 36,
-          color: "#0f0c29",
-          background: "#ffcc00",
-          padding: "14px 28px",
+          fontFamily: FONT,
+          fontSize: 38,
+          lineHeight: 1.2,
+          color: INK,
+          background: ACCENT,
+          padding: "18px 40px",
           borderRadius: 999,
-          fontFamily: "sans-serif",
-          fontWeight: 800,
+          fontWeight: 900,
           textAlign: "center",
+          maxWidth: 900,
+          boxShadow: "0 10px 32px rgba(0,0,0,0.5)",
+          transform: `scale(${pulse})`,
         }}
       >
         {cta}
@@ -245,23 +658,58 @@ const CtaOverlay: React.FC<{ cta: string; showAfter: number }> = ({
   );
 };
 
+const ProgressBar: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames, width } = useVideoConfig();
+  const w = interpolate(frame, [0, durationInFrames - 1], [0, width], {
+    extrapolateRight: "clamp",
+  });
+  return (
+    <AbsoluteFill style={{ justifyContent: "flex-end" }}>
+      <div style={{ height: 8, width: "100%", background: "rgba(255,255,255,0.12)" }}>
+        <div style={{ height: "100%", width: w, background: ACCENT }} />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// ---------------------------------------------------------------- música
+
 // Música de fundo (OST/tema do jogo) em loop, em volume baixo para não
 // competir com a narração — a narração é sempre a prioridade de mixagem.
 // MUSIC_CLIP_DURATION_SECONDS precisa bater com CLIP_DURATION_SECONDS em
 // video_gen/music.py.
 const MUSIC_CLIP_DURATION_SECONDS = 60;
 const MUSIC_VOLUME = 0.12;
+const MUSIC_FADE_IN_SECONDS = 0.8;
+const MUSIC_FADE_OUT_SECONDS = 1.5;
 
 const BackgroundMusic: React.FC<{ src: string }> = ({ src }) => {
+  const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const clipFrames = Math.round(MUSIC_CLIP_DURATION_SECONDS * fps);
+  // Volume calculado com o frame GLOBAL (fora do <Loop>, cujo frame é local
+  // à iteração), pra o fade-out acontecer no fim do vídeo e não do loop.
+  const volume = interpolate(
+    frame,
+    [
+      0,
+      MUSIC_FADE_IN_SECONDS * fps,
+      durationInFrames - MUSIC_FADE_OUT_SECONDS * fps,
+      durationInFrames,
+    ],
+    [0, MUSIC_VOLUME, MUSIC_VOLUME, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
 
   return (
     <Loop durationInFrames={clipFrames} times={Math.ceil(durationInFrames / clipFrames)}>
-      <Audio src={src} volume={MUSIC_VOLUME} />
+      <Audio src={src} volume={volume} />
     </Loop>
   );
 };
+
+// ---------------------------------------------------------------- composição
 
 export const NewsShort: React.FC<NewsShortProps> = ({
   hook,
@@ -270,10 +718,22 @@ export const NewsShort: React.FC<NewsShortProps> = ({
   audioPath,
   backgroundVideoPath,
   musicPath,
+  badge,
+  channelHandle,
+  channelInitials,
   words,
 }) => {
-  const ctaShowAfter =
-    words.length > 0 ? Math.max(2, words[words.length - 1].end - 1.5) : 4;
+  const lastWordEnd = words.length > 0 ? words[words.length - 1].end : 8;
+  const ctaShowAfter = Math.max(2, lastWordEnd - 1.5);
+
+  // O hook fica na tela enquanto está sendo narrado (as N primeiras palavras
+  // da narração são o hook) + um respiro, depois sai pra liberar o topo.
+  const hookWordCount = hook.split(/\s+/).filter(Boolean).length;
+  const hookNarrationEnd =
+    words.length >= hookWordCount && hookWordCount > 0
+      ? words[hookWordCount - 1].end
+      : Math.min(3.5, lastWordEnd);
+  const hookHideAt = Math.min(hookNarrationEnd + HOOK_HOLD_SECONDS, ctaShowAfter - 0.5);
 
   // audioPath chega como um caminho relativo dentro de remotion/public/
   // (ex: "audio/item_1.mp3"), copiado pra lá pelo assembler.py antes do render.
@@ -282,13 +742,20 @@ export const NewsShort: React.FC<NewsShortProps> = ({
   const musicSrc = musicPath ? staticFile(musicPath) : "";
 
   return (
-    <AbsoluteFill>
-      {backgroundSrc ? <GameplayBackground src={backgroundSrc} /> : <Background />}
+    <AbsoluteFill style={{ background: INK }}>
+      {backgroundSrc ? <GameplayBackground src={backgroundSrc} /> : <GradientBackground />}
+      <ReadabilityOverlay />
       {audioSrc ? <Audio src={audioSrc} /> : null}
       {musicSrc ? <BackgroundMusic src={musicSrc} /> : null}
-      <HookOverlay hook={hook} source={source} />
+      <BrandWatermark handle={channelHandle} />
+      <BadgeOverlay badge={badge} hideAfter={ctaShowAfter} />
+      <HookOverlay hook={hook} source={source} hideAt={hookHideAt} />
       <WordCaptions words={words} />
+      {SHOW_FOLLOW_NUDGE ? (
+        <FollowNudge ctaShowAfter={ctaShowAfter} initials={channelInitials} />
+      ) : null}
       <CtaOverlay cta={cta} showAfter={ctaShowAfter} />
+      <ProgressBar />
     </AbsoluteFill>
   );
 };

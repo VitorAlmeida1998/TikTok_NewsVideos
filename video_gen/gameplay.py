@@ -32,6 +32,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+import time
 from pathlib import Path
 
 logger = logging.getLogger("video_gen.gameplay")
@@ -40,7 +41,78 @@ PROJECT_ROOT = Path(__file__).parent.parent
 CACHE_DIR = PROJECT_ROOT / "data" / "gameplay_cache"
 MANUAL_CLIPS_DIR = PROJECT_ROOT / "video_gen" / "manual_clips"
 
-CLIP_START_SECONDS = 8  # pula a intro/logo dos trailers
+# Busca os N primeiros resultados e fica com o primeiro que baixar: se o
+# trailer mais bem ranqueado tiver restrição de idade (falha, não contornamos),
+# o yt-dlp simplesmente passa pro próximo resultado oficial.
+SEARCH_RESULTS = 5
+# yt-dlp pode sair com 101 (limite de downloads atingido) — é sucesso.
+YTDLP_OK_RETURNCODES = (0, 101)
+# Depois de uma busca sem resultado, não tenta de novo por esse tempo (o cron
+# roda a cada 30 min; sem isso a mesma busca falha repetidamente no YouTube).
+UNAVAILABLE_RETRY_HOURS = 24
+# O trecho baixado começa no MEIO do vídeo (fração da duração): o começo de
+# trailer é logo/classificação etária/tela preta, e o começo de OST é intro
+# lenta. Nunca pega o início. Clipes manuais/upload não passam por isso (o
+# usuário escolhe o início no painel).
+MIDDLE_START_FRACTION = 0.45
+
+
+def unavailable_marker(cache_dir: Path, slug: str) -> Path:
+    return cache_dir / f"{slug}.unavailable"
+
+
+def recently_unavailable(cache_dir: Path, slug: str) -> bool:
+    marker = unavailable_marker(cache_dir, slug)
+    if not marker.exists():
+        return False
+    return (time.time() - marker.stat().st_mtime) < UNAVAILABLE_RETRY_HOURS * 3600
+
+
+def mark_unavailable(cache_dir: Path, slug: str) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    unavailable_marker(cache_dir, slug).touch()
+
+
+def section_from_middle(duration: float, clip_seconds: int) -> str:
+    """Expressão de --download-sections começando em MIDDLE_START_FRACTION da
+    duração, recuada se não couber `clip_seconds` até o fim (vídeo curto
+    demais começa do 0). O fim para 1s antes da duração declarada: pedir
+    exatamente até o último segundo faz o yt-dlp/ffmpeg devolver arquivo
+    vazio em alguns streams DASH."""
+    end_limit = max(1.0, duration - 1.0)
+    start = max(0.0, min(duration * MIDDLE_START_FRACTION, end_limit - clip_seconds))
+    end = min(start + clip_seconds, end_limit)
+    return f"*{start:.0f}-{end:.0f}"
+
+
+def find_youtube_candidate(query: str, match_filters: str, runner, timeout: int) -> tuple[str, float] | None:
+    """Faz a busca no YouTube sem baixar e devolve (video_id, duração) do
+    primeiro resultado que o yt-dlp consegue extrair (um resultado com
+    restrição de idade falha na extração e é simplesmente pulado — nunca
+    tentamos contornar o gate)."""
+    cmd = [
+        "yt-dlp",
+        query,
+        "--js-runtimes",
+        "deno",
+        "--skip-download",
+        "--match-filters",
+        match_filters,
+        "--print",
+        "%(id)s %(duration)s",
+    ]
+    result = runner(cmd, timeout=timeout)
+    for line in (getattr(result, "stdout", "") or "").splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        video_id, duration = parts
+        try:
+            return video_id, float(duration)
+        except ValueError:
+            continue
+    return None
+
 # Duração do clipe baixado: longa o suficiente para cobrir a narração
 # inteira sem precisar repetir (loop) no meio do vídeo — narrações
 # costumam durar 20-40s, então 60s cobre a grande maioria sem "costura"
@@ -150,33 +222,52 @@ def download_trailer_clip(
     raw_path = CACHE_DIR / f"{slug}_raw.mp4"
     final_path = CACHE_DIR / f"{slug}.mp4"
 
-    query = f"ytsearch1:{game_name} official trailer"
-    section = f"*{CLIP_START_SECONDS}-{CLIP_START_SECONDS + CLIP_DURATION_SECONDS}"
+    if recently_unavailable(CACHE_DIR, slug):
+        logger.info("Busca de trailer para '%s' falhou há menos de %dh, não tentando de novo",
+                    game_name, UNAVAILABLE_RETRY_HOURS)
+        return None
 
-    download_cmd = [
-        "yt-dlp",
-        query,
-        "--js-runtimes",
-        "deno",
-        "-f",
-        "bestvideo[height<=1080][ext=mp4]/best[ext=mp4]",
-        "--download-sections",
-        section,
-        "-o",
-        str(raw_path),
-    ]
+    query = f"ytsearch{SEARCH_RESULTS}:{game_name} official trailer"
 
     try:
+        # evita "all cutscenes 4 hours" e lives; trailers têm poucos minutos
+        candidate = find_youtube_candidate(query, "duration<900 & !is_live", runner, timeout)
+        if candidate is None:
+            mark_unavailable(CACHE_DIR, slug)
+            logger.warning(
+                "Nenhum trailer extraível no YouTube para '%s' (restrição de idade?). "
+                "Envie um vídeo de fundo pelo painel ou coloque um clipe manual em "
+                "video_gen/manual_clips/%s.mp4",
+                game_name,
+                slug,
+            )
+            return None
+        video_id, duration = candidate
+        section = section_from_middle(duration, CLIP_DURATION_SECONDS)
+        download_cmd = [
+            "yt-dlp",
+            f"https://www.youtube.com/watch?v={video_id}",
+            "--js-runtimes",
+            "deno",
+            "-f",
+            "bestvideo[height<=1080][ext=mp4]/best[ext=mp4]",
+            "--download-sections",
+            section,
+            "-o",
+            str(raw_path),
+        ]
+        logger.info("Baixando trailer %s de '%s' (duração %.0fs, trecho %s)", video_id, game_name, duration, section)
         result = runner(download_cmd, timeout=timeout)
     except Exception:
         logger.exception("Falha ao rodar yt-dlp para '%s'", game_name)
         return None
 
-    if result.returncode != 0 or not raw_path.exists():
+    if result.returncode not in YTDLP_OK_RETURNCODES or not raw_path.exists():
+        mark_unavailable(CACHE_DIR, slug)
         logger.warning(
             "yt-dlp não encontrou/baixou trailer para '%s' (returncode=%s): %s. "
-            "Se for restrição de idade, coloque um clipe manual em "
-            "video_gen/manual_clips/%s.mp4",
+            "Se for restrição de idade, envie um vídeo de fundo pelo painel ou coloque "
+            "um clipe manual em video_gen/manual_clips/%s.mp4",
             game_name,
             getattr(result, "returncode", "?"),
             getattr(result, "stderr", "")[-500:],
@@ -206,8 +297,13 @@ def download_trailer_clip(
     raw_path.unlink(missing_ok=True)
 
     if crop_result.returncode != 0 or not final_path.exists():
-        logger.warning("Falha ao recortar clipe para '%s'", game_name)
+        logger.warning(
+            "Falha ao recortar clipe para '%s': %s",
+            game_name,
+            getattr(crop_result, "stderr", "")[-400:],
+        )
         return None
 
+    unavailable_marker(CACHE_DIR, slug).unlink(missing_ok=True)
     logger.info("Clipe de gameplay pronto para '%s': %s", game_name, final_path)
     return final_path

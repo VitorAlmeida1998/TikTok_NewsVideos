@@ -48,3 +48,17 @@ def test_run_with_no_pending_items(tmp_db_path):
     total_evaluated, total_relevant = run(db_path=tmp_db_path)
     assert total_evaluated == 0
     assert total_relevant == 0
+
+
+def test_run_rescore_reevaluates_already_evaluated_items(tmp_db_path):
+    with get_connection(tmp_db_path) as conn:
+        save_item(conn, make_item("Big Sequel Leaked Online", "https://example.com/1"))
+    run(db_path=tmp_db_path)
+
+    with get_connection(tmp_db_path) as conn:
+        conn.execute("UPDATE news_items SET relevance_score = NULL")
+
+    evaluated, relevant = run(db_path=tmp_db_path, rescore=True)
+    assert (evaluated, relevant) == (1, 1)
+    with get_connection(tmp_db_path) as conn:
+        assert get_relevant_items(conn)[0]["relevance_score"] > 0

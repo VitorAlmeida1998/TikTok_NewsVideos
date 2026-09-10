@@ -24,6 +24,9 @@ from pathlib import Path
 
 import requests
 
+from publisher.oauth import OAuthError, refresh_access_token
+from publisher.token_store import is_expired, load_tokens, save_tokens
+
 logger = logging.getLogger("publisher")
 
 API_BASE = "https://open.tiktokapis.com/v2"
@@ -37,13 +40,44 @@ class PublisherError(RuntimeError):
 
 
 def _get_access_token() -> str:
-    token = os.environ.get("TIKTOK_ACCESS_TOKEN")
-    if not token:
-        raise PublisherError(
-            "TIKTOK_ACCESS_TOKEN não configurado. Defina no .env (veja .env.example). "
-            "Requer app aprovado em developers.tiktok.com com Content Posting API."
+    """Resolve o access_token a usar, nesta ordem:
+
+    1. Token salvo em data/tiktok_tokens.json, ainda válido.
+    2. O mesmo arquivo, mas expirado — renova sozinho via refresh_token
+       (dura 365 dias, não exige login no navegador de novo) e persiste o
+       par novo (a TikTok pode rotacionar o refresh_token a cada renovação).
+    3. TIKTOK_ACCESS_TOKEN fixo no .env — compatibilidade com um token colado
+       manualmente (expira em 24h, sem renovação automática).
+    """
+    tokens = load_tokens()
+    if tokens and not is_expired(tokens):
+        return tokens["access_token"]
+
+    client_key = os.environ.get("TIKTOK_CLIENT_KEY")
+    client_secret = os.environ.get("TIKTOK_CLIENT_SECRET")
+
+    if tokens and tokens.get("refresh_token") and client_key and client_secret:
+        try:
+            refreshed = refresh_access_token(tokens["refresh_token"], client_key, client_secret)
+        except OAuthError as exc:
+            raise PublisherError(f"Falha ao renovar o token do TikTok: {exc}") from exc
+        save_tokens(
+            access_token=refreshed["access_token"],
+            refresh_token=refreshed.get("refresh_token", tokens["refresh_token"]),
+            expires_in=refreshed.get("expires_in", 86400),
         )
-    return token
+        return refreshed["access_token"]
+
+    token = os.environ.get("TIKTOK_ACCESS_TOKEN")
+    if token:
+        return token
+
+    raise PublisherError(
+        "Nenhum token do TikTok disponível. Rode `uv run python -m publisher.get_token` "
+        "pra gerar o par access_token/refresh_token inicial (requer TIKTOK_CLIENT_KEY, "
+        "TIKTOK_CLIENT_SECRET e TIKTOK_REDIRECT_URI no .env, e um app com Content "
+        "Posting API em developers.tiktok.com)."
+    )
 
 
 def _auth_headers(access_token: str) -> dict:

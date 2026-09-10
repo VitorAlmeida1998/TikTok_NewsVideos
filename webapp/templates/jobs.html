@@ -14,7 +14,7 @@
     <div class="card job-card {{ 'highlight' if job.id == highlight }}">
       <div class="job-head">
         <div class="job-kind">
-          {% if job.kind == 'collect' %}🔄{% elif 'script' in job.kind %}📝{% elif 'video' in job.kind %}🎬{% else %}⚙️{% endif %}
+          {% if job.kind == 'collect' %}{{ icon('refresh-cw') }}{% elif 'script' in job.kind %}{{ icon('file-text') }}{% elif 'video' in job.kind %}{{ icon('clapperboard') }}{% else %}{{ icon('settings-2') }}{% endif %}
           {{ job.kind }}
           <span class="job-id">#{{ job.id }}</span>
         </div>
@@ -37,7 +37,7 @@
   {% endfor %}
 {% else %}
   <div class="empty-state">
-    <div class="icon">🗂️</div>
+    <div class="icon">{{ icon('folder-open', size=32) }}</div>
     <p>Nenhuma tarefa executada ainda.</p>
   </div>
 {% endif %}
