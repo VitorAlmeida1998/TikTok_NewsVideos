@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TikTok GameNews{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">{{ icon('gamepad-2', size=22) }}</span>
+      <div class="brand-text">
+        <span class="title">TikTok GameNews</span>
+        <span class="subtitle">Painel de produção</span>
+      </div>
+    </div>
+    <nav>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">Notícias</a>
+      <a href="{{ url_for('publish_queue_page') }}" class="{{ 'active' if request.endpoint == 'publish_queue_page' }}">Publicar</a>
+      <a href="{{ url_for('voices_page') }}" class="{{ 'active' if request.endpoint == 'voices_page' }}">Vozes</a>
+      <a href="{{ url_for('jobs_page') }}" class="{{ 'active' if request.endpoint == 'jobs_page' }}">Tarefas</a>
+    </nav>
+  </header>
+  <div class="container{% block container_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

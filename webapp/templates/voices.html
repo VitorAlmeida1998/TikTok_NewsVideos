@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Vozes — TikTok GameNews{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Comparador de vozes</h1>
+    <p class="sub">Gere a mesma frase em vozes diferentes e escolha de ouvido</p>
+  </div>
+  <div class="watcher-status {{ 'alive' if current_voice }}">
+    <span class="dot"></span>
+    {% if settings.voice_label %}{{ settings.voice_label }}{% elif current_voice %}{{ current_voice[:12] }}…{% else %}voz padrão (Adam){% endif %}
+  </div>
+</div>
+
+<div class="card warn">
+  <p>
+    {{ icon('triangle-alert', size=16) }}
+    <span>
+      <strong>Essa é a maior melhoria de retenção disponível hoje.</strong> A voz atual é inglesa
+      falando português — o público BR percebe o sotaque no primeiro segundo e sai, ainda mais
+      num vídeo que se apresenta como notícia. Uma voz nativa PT-BR resolve isso sem mexer em
+      mais nada do pipeline.
+    </span>
+  </p>
+</div>
+
+<div class="card" style="background:var(--bg-elevated); border-style:dashed;">
+  <p class="hint icon-inline" style="font-size:13px; line-height:1.6;">
+    {{ icon('info', size=15) }}
+    <span>
+      A chave desta conta não tem a permissão <code>voices_read</code>, então o painel não
+      consegue listar a biblioteca do ElevenLabs. Pra testar uma voz brasileira: abra
+      <strong>elevenlabs.io → Voices → Voice Library</strong>, filtre por <em>Portuguese (Brazil)</em>,
+      abra a voz e copie o <strong>Voice ID</strong>. Cole no campo abaixo e gere a amostra.
+      <br>Cada amostra gasta créditos de TTS (~{{ sample_text|length }} caracteres).
+    </span>
+  </p>
+</div>
+
+<div class="section-title">{{ icon('mic', size=14) }} Testar uma voz da biblioteca</div>
+<div class="card">
+  <div class="row" style="align-items:flex-end;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Voice ID do ElevenLabs</label>
+      <input type="text" id="custom-voice-id" placeholder="ex: XB0fDUnXU5powFXDhCwa" style="width:100%;">
+    </div>
+    <div style="flex:0;">
+      <button type="button" onclick="generateSample(document.getElementById('custom-voice-id').value, 'custom')">
+        {{ icon('mic') }} Gerar amostra
+      </button>
+    </div>
+  </div>
+  <div id="sample-custom" class="async-status"></div>
+  <div id="player-custom" style="margin-top:12px;"></div>
+</div>
+
+<div class="section-title">{{ icon('mic', size=14) }} Frase de teste</div>
+<div class="card">
+  <p class="summary-text" style="margin:0;">“{{ sample_text }}”</p>
+</div>
+
+<div class="section-title">{{ icon('list-checks', size=14) }} Vozes candidatas</div>
+{% for candidate in candidates %}
+  <div class="card voice-card {{ 'highlight' if candidate.is_current }}">
+    <div class="voice-head">
+      <div>
+        <strong>{{ candidate.name }}</strong>
+        {% if candidate.is_current %}<span class="status-pill video">em uso</span>{% endif %}
+        <p class="hint" style="margin-top:2px;">{{ candidate.note }} · <code>{{ candidate.voice_id }}</code></p>
+      </div>
+      <div class="voice-actions">
+        <button type="button" class="secondary sm" onclick="generateSample('{{ candidate.voice_id }}', '{{ candidate.voice_id }}')">
+          {{ icon('mic', size=14) }} Gerar amostra
+        </button>
+        <form method="post" action="{{ url_for('use_voice') }}">
+          <input type="hidden" name="voice_id" value="{{ candidate.voice_id }}">
+          <input type="hidden" name="voice_label" value="{{ candidate.name }}">
+          <button type="submit" class="sm" {{ 'disabled' if candidate.is_current }}>{{ icon('check', size=14) }} Usar esta voz</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="sample-{{ candidate.voice_id }}" class="async-status"></div>
+    <div id="player-{{ candidate.voice_id }}" style="margin-top:10px;">
+      {% if candidate.has_sample %}
+        <audio controls preload="none" src="{{ url_for('media_voice_sample', voice_id=candidate.voice_id) }}"></audio>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+
+<script>
+function pollJob(jobId, statusElId, onDone) {
+  const el = document.getElementById(statusElId);
+  const interval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) {
+        el.innerHTML = `<p class="msg-error">Não foi possível consultar a tarefa (HTTP ${res.status}).</p>`;
+        clearInterval(interval);
+        return;
+      }
+      const job = await res.json();
+      const badgeClass = job.status === 'error' ? 'error' : (job.status === 'done' ? 'done' : 'running');
+      el.innerHTML = `<span class="job-status-badge ${badgeClass}">${job.status}</span>` +
+        (job.error ? `<p class="msg-error">${job.error}</p>` : '');
+      if (job.status === 'done' || job.status === 'error') {
+        clearInterval(interval);
+        if (onDone) onDone(job);
+      }
+    } catch (err) {
+      el.innerHTML = `<p class="msg-error">Erro de conexão: ${err}</p>`;
+      clearInterval(interval);
+    }
+  }, 1500);
+}
+
+async function generateSample(voiceId, slot) {
+  voiceId = (voiceId || '').trim();
+  const statusEl = document.getElementById('sample-' + slot);
+  if (!voiceId) {
+    statusEl.innerHTML = '<p class="msg-error">Cole um Voice ID primeiro.</p>';
+    return;
+  }
+  const body = new FormData();
+  body.append('voice_id', voiceId);
+  const res = await fetch('/vozes/amostra', { method: 'POST', body });
+  const data = await res.json();
+  if (!res.ok || !data.job_id) {
+    statusEl.innerHTML = `<p class="msg-error">${data.error || 'Erro ao iniciar a geração.'}</p>`;
+    return;
+  }
+  pollJob(data.job_id, 'sample-' + slot, (job) => {
+    if (job.status === 'done') {
+      document.getElementById('player-' + slot).innerHTML =
+        `<audio controls autoplay src="/media/voice-sample/${voiceId}?t=${Date.now()}"></audio>`;
+    }
+  });
+}
+</script>
+
+{% endblock %}

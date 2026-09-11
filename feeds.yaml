@@ -1,0 +1,48 @@
+# Feeds RSS monitorados pelo collector (checados a cada 2 min pelo monitor,
+# com GET condicional — ver collector/feed_cache.py).
+#
+# name: identificador curto usado como "source" nos itens salvos. O peso de
+#   cada fonte no ranking fica em dedupe/keyword_filter.py (SOURCE_WEIGHTS);
+#   fonte sem peso declarado vale 1.0.
+# url: URL do feed RSS/Atom
+#
+# Critério pra entrar aqui: a fonte precisa PUBLICAR NOTÍCIA, e de preferência
+# antes dos outros. Agregador de SEO (listicle, "códigos grátis de Roblox",
+# guia) só polui a fila — testei gamerant, destructoid, criticalhits e
+# adrenaline e deixei de fora por isso.
+feeds:
+  # --- Fontes oficiais: quem dá a notícia primeiro é o próprio dono dela ---
+  - name: playstation
+    url: https://blog.playstation.com/feed/
+  - name: xbox
+    url: https://news.xbox.com/en-us/feed/
+
+  # --- Furo/vazamento: onde a notícia "VAZOU" costuma nascer ---
+  - name: vgc
+    url: https://www.videogameschronicle.com/feed/
+  - name: insidergaming
+    url: https://insider-gaming.com/feed/
+
+  # --- Imprensa internacional generalista ---
+  - name: ign
+    url: https://feeds.ign.com/ign/games-all
+  - name: eurogamer
+    url: https://www.eurogamer.net/feed
+  - name: gamespot
+    url: https://www.gamespot.com/feeds/mashup/
+  - name: polygon
+    url: https://www.polygon.com/rss/index.xml
+  - name: pcgamer
+    url: https://www.pcgamer.com/rss/
+  - name: kotaku
+    url: https://kotaku.com/rss
+
+  # --- Plataformas específicas (Nintendo e PlayStation puxam muito no BR) ---
+  - name: nintendolife
+    url: https://www.nintendolife.com/feeds/latest
+  - name: pushsquare
+    url: https://www.pushsquare.com/feeds/latest
+
+  # --- Indústria/negócios: pauta mais fria, peso menor no ranking ---
+  - name: gamesindustry
+    url: https://www.gamesindustry.biz/feed
