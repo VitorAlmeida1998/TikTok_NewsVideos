@@ -50,6 +50,57 @@ def test_item_exists_false_for_unknown_hash(tmp_db_path):
         assert item_exists(conn, "nonexistent-hash") is False
 
 
+def _add_relevant_with_script(conn) -> int:
+    from shared.db import save_script
+
+    item = make_item()
+    save_item(conn, item)
+    item_id = conn.execute(
+        "SELECT id FROM news_items WHERE content_hash = ?", (item.content_hash,)
+    ).fetchone()[0]
+    conn.execute("UPDATE news_items SET is_relevant = 1 WHERE id = ?", (item_id,))
+    save_script(conn, item_id, hook="h", body="b", cta="c", model="m", game_name="G")
+    return item_id
+
+
+def test_update_script_with_all_empty_fields_clears_script(tmp_db_path):
+    """Regressão: salvar o roteiro vazio pelo painel gravava "" — o item saía
+    da fila de roteiro e entrava na de vídeo com narração vazia."""
+    from shared.db import get_items_pending_script, get_items_pending_video, update_script
+
+    with get_connection(tmp_db_path) as conn:
+        item_id = _add_relevant_with_script(conn)
+        update_script(conn, item_id, hook="", body="", cta="", game_name="G")
+
+        row = conn.execute(
+            "SELECT script_hook, script_body, script_cta FROM news_items WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+        assert tuple(row) == (None, None, None)
+        assert [r["id"] for r in get_items_pending_script(conn)] == [item_id]
+        assert get_items_pending_video(conn) == []
+
+
+def test_update_script_keeps_edited_script(tmp_db_path):
+    from shared.db import get_items_pending_video, update_script
+
+    with get_connection(tmp_db_path) as conn:
+        item_id = _add_relevant_with_script(conn)
+        update_script(conn, item_id, hook="novo h", body="novo b", cta="novo c", game_name="G")
+
+        assert [r["id"] for r in get_items_pending_video(conn)] == [item_id]
+        assert get_items_pending_video(conn)[0]["script_body"] == "novo b"
+
+
+def test_pending_video_skips_empty_script_body(tmp_db_path):
+    from shared.db import get_items_pending_video
+
+    with get_connection(tmp_db_path) as conn:
+        item_id = _add_relevant_with_script(conn)
+        conn.execute("UPDATE news_items SET script_body = '' WHERE id = ?", (item_id,))
+        assert get_items_pending_video(conn) == []
+
+
 def test_get_unevaluated_items_returns_all_new_items(tmp_db_path):
     from shared.db import get_unevaluated_items
 

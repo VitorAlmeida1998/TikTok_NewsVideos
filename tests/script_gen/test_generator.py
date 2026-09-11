@@ -1,7 +1,15 @@
 """Testes do gerador de roteiro (mock do runner do claude CLI, sem custo/chamadas reais)."""
+import subprocess
+
 import pytest
 
-from script_gen.generator import ScriptGenError, _parse_script_response, generate_script
+from script_gen import generator
+from script_gen.generator import (
+    MAX_SUMMARY_CHARS,
+    ScriptGenError,
+    _parse_script_response,
+    generate_script,
+)
 
 
 def _make_runner(response_text: str):
@@ -117,3 +125,49 @@ def test_script_gen_error_is_raised_on_cli_failure():
 
     with pytest.raises(ScriptGenError):
         generate_script(title="T", summary="S", source="src", runner=failing_runner)
+
+
+def test_generate_script_truncates_huge_summary():
+    """Regressão: feeds que mandam a matéria inteira (~150 mil caracteres)
+    no resumo estouravam o limite de argumento do `claude`."""
+    captured = {}
+
+    def runner(prompt: str) -> str:
+        captured["prompt"] = prompt
+        return _format_response()
+
+    huge = "palavra " * 20_000  # ~160 mil caracteres
+    generate_script(title="T", summary=huge, source="src", runner=runner)
+
+    resumo = captured["prompt"].split("Resumo: ", 1)[1]
+    assert len(resumo) <= MAX_SUMMARY_CHARS + 1
+    assert resumo.endswith("palavra…")
+
+
+def test_generate_script_keeps_short_summary_intact():
+    captured = {}
+
+    def runner(prompt: str) -> str:
+        captured["prompt"] = prompt
+        return _format_response()
+
+    generate_script(title="T", summary="Resumo curto.", source="src", runner=runner)
+    assert captured["prompt"].endswith("Resumo: Resumo curto.")
+
+
+def test_run_claude_cli_sends_prompt_via_stdin(monkeypatch):
+    """O prompt vai pelo stdin, nunca como argumento (limite de 128 KB por
+    argumento no Linux)."""
+    calls = {}
+
+    def fake_run(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["input"] = kwargs.get("input")
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(generator.subprocess, "run", fake_run)
+    prompt = "x" * 200_000
+
+    assert generator._run_claude_cli(prompt) == "ok"
+    assert calls["cmd"] == ["claude", "-p"]
+    assert calls["input"] == prompt

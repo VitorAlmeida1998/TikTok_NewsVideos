@@ -276,7 +276,7 @@ def get_items_pending_video(
     rows = conn.execute(
         f"""
         SELECT *, {EFFECTIVE_SCORE_SQL} AS effective_score FROM news_items
-        WHERE script_body IS NOT NULL AND video_path IS NULL{age_clause}
+        WHERE script_body IS NOT NULL AND script_body != '' AND video_path IS NULL{age_clause}
         {_NO_DUPLICATE_STORY.format(column="video_path")}
         {PRIORITY_ORDER}
         """,
@@ -578,7 +578,14 @@ def update_script(
     description: str = "",
     pronunciations: str = "",
 ) -> None:
-    """Atualiza manualmente o roteiro de um item (edição pelo usuário no front-end)."""
+    """Atualiza manualmente o roteiro de um item (edição pelo usuário no front-end).
+
+    Salvar com hook, body e cta todos vazios limpa o roteiro (NULL) em vez de
+    gravar strings vazias: com "" o item sumia da fila de roteiro
+    (`script_body IS NULL`) e entrava na de vídeo como se estivesse pronto.
+    """
+    if not (hook or body or cta):
+        hook = body = cta = description = pronunciations = None
     conn.execute(
         """
         UPDATE news_items

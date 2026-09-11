@@ -7,10 +7,14 @@ Por que CLI e não o SDK da Anthropic:
 - O SDK Python (anthropic.Anthropic) usa API keys com billing separado
   por token (console.anthropic.com/settings/billing), que é uma conta
   diferente e pode estar sem crédito.
-- Rodamos `claude -p "<prompt>"` como subprocess, com ANTHROPIC_API_KEY
-  removida do ambiente do subprocesso para forçar o uso do login OAuth
-  (a env var, se presente, tem prioridade sobre o login e faria o CLI
-  tentar cobrar da API paga).
+- Rodamos `claude -p` como subprocess com o prompt pelo stdin, com
+  ANTHROPIC_API_KEY removida do ambiente do subprocesso para forçar o uso
+  do login OAuth (a env var, se presente, tem prioridade sobre o login e
+  faria o CLI tentar cobrar da API paga).
+- Prompt pelo stdin, não como argumento: o Linux limita cada argumento a
+  128 KB (MAX_ARG_STRLEN), e alguns feeds mandam a matéria inteira no
+  resumo (listas de ~150 mil caracteres) — isso quebrava com
+  "OSError: [Errno 7] Argument list too long: 'claude'".
 
 Por que o formato de resposta NÃO é JSON:
 - Notícias de games frequentemente têm aspas no próprio título/resumo
@@ -34,6 +38,11 @@ logger = logging.getLogger("script_gen")
 DEFAULT_MODEL = "claude-cli"  # marcador; o modelo real é decidido pela assinatura/CLI
 
 FIELD_NAMES = ["HOOK", "BODY", "CTA", "DESCRIPTION", "GAME_NAME", "PRONUNCIATIONS"]
+
+# Um roteiro de ~30s só precisa do começo da matéria. Resumos gigantes (feeds
+# que mandam o artigo inteiro) deixam o `claude -p` lento a ponto de estourar
+# o timeout e gastam cota da assinatura à toa.
+MAX_SUMMARY_CHARS = 4000
 
 SYSTEM_PROMPT = """\
 Você é um criador de conteúdo brasileiro, do tipo que grava vídeo curto de \
@@ -151,14 +160,16 @@ class ScriptGenError(RuntimeError):
 
 
 def _run_claude_cli(prompt: str, timeout: int = 60) -> str:
-    """Executa `claude -p <prompt>` como subprocess, sem ANTHROPIC_API_KEY no
-    ambiente (para forçar uso do login OAuth da assinatura Pro/Max).
+    """Executa `claude -p` como subprocess com o prompt pelo stdin, sem
+    ANTHROPIC_API_KEY no ambiente (para forçar uso do login OAuth da
+    assinatura Pro/Max).
     """
     env = os.environ.copy()
     env.pop("ANTHROPIC_API_KEY", None)
 
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        ["claude", "-p"],
+        input=prompt,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -201,6 +212,8 @@ def generate_script(
             "estrutura de nenhum deles — varie a forma de fisgar:\n" + listed
         )
 
+    summary = _truncate_summary(summary)
+
     full_prompt = (
         f"{SYSTEM_PROMPT}{avoid_block}\n\n"
         f"Fonte: {source}\n"
@@ -210,6 +223,17 @@ def generate_script(
 
     raw_text = runner(full_prompt)
     return _parse_script_response(raw_text)
+
+
+def _truncate_summary(summary: str, limit: int = MAX_SUMMARY_CHARS) -> str:
+    """Corta o resumo em `limit` caracteres, no último espaço antes do limite
+    (sem partir palavra no meio), marcando o corte com "…"."""
+    if not summary or len(summary) <= limit:
+        return summary
+    cut = summary[:limit]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip() + "…"
 
 
 # Depois dos dois-pontos só consome espaço/tab (não \n): um campo vazio seguido
